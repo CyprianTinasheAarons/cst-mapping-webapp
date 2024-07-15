@@ -30,6 +30,8 @@ interface TableFormProps {
     id: number;
     name: string;
     disabled: boolean;
+    sentinelonedisabled: boolean;
+    bitdefenderdisabled: boolean;
     override: boolean;
     override_count: number;
     bitdefendername: string;
@@ -66,7 +68,7 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
     );
 
     try {
-      const response = await MiddlewareService.toggleClientDisabledStatus({
+      const response = await MiddlewareService.toggleBitdefenderDisabledStatus({
         client_id: rowId,
       });
       if (response.status === 200) {
@@ -169,12 +171,12 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                checked={row.disabled}
+                checked={row.bitdefenderdisabled}
                 onChange={() => handleToggleDisabledStatus(row.id)}
                 className="cursor-pointer h-5 w-5"
               />
               <label className="text-lg font-medium">
-                {row.disabled ? "Yes" : "No"}
+                {row.bitdefenderdisabled ? "Yes" : "No"}
               </label>
             </div>
           </TableCell>
