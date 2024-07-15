@@ -1,4 +1,3 @@
-import MiddlewareService from "@/api/middleware";
 import AuthButton from "@/components/AuthButton";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
@@ -24,7 +23,6 @@ export default async function ProtectedPage() {
     return <div>Error loading data</div>;
   }
 
-
   return (
     <div className="flex-1 w-full flex flex-col gap-10 items-center">
       <div className="w-full">
@@ -33,10 +31,13 @@ export default async function ProtectedPage() {
           user
         </div>
         <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
-          <div className="w-full max-w-4xl flex justify-between items-end p-3 text-sm">
+          <a
+            href="/protected"
+            className="w-full max-w-4xl flex justify-between items-end p-3 text-sm"
+          >
             <h1 className="font-bold text-lg">Bitdefender Customer Mapping</h1>
             <AuthButton />
-          </div>
+          </a>
         </nav>
       </div>
       <div className="w-full  flex justify-center items-center p-3 text-sm flex-col min-h-screen">

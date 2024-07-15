@@ -23,13 +23,16 @@ export default async function ProtectedPage() {
           user
         </div>
         <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
-          <div className="w-full max-w-4xl flex justify-end items-end p-3 text-sm">
+          <div className="w-full max-w-4xl flex justify-between items-end p-3 text-sm">
+            <div className="font-bold text-lg text-[#0C797D]">
+              CST | Customer Mapping Dashboard
+            </div>
             <AuthButton />
           </div>
         </nav>
       </div>
 
-      <div className="flex-1 flex flex-col gap-20 max-w-4xl px-3">
+      <div className="flex-1 flex flex-col gap-2 max-w-4xl px-3">
         <Header />
         <main className="flex-1 flex flex-col gap-6">
           <Select />

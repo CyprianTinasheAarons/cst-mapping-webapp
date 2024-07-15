@@ -102,7 +102,7 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
     overrideCount: number
   ) => {
     try {
-      const response = await MiddlewareService.setBitdefenderOverrideStatus({
+      const response = await MiddlewareService.setSentinelOneOverrideStatus({
         client_id: rowId,
         enable: enable,
         count: overrideCount,
@@ -160,7 +160,7 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
       .map((row) => (
         <TableRow key={row.id}>
           <TableCell className="w-[150px] text-xs border border-gray-300">
-            {row.bitdefendername}
+            {row.sentinelonename}
           </TableCell>
           <TableCell className="w-[150px] text-xs border border-gray-300">
             {row.name}
@@ -182,18 +182,18 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                checked={row.bitdefenderoverride}
+                checked={row.sentineloneoverride}
                 onChange={() =>
                   handleInputChange(
                     row.id,
-                    "bitdefenderoverride",
-                    !row.bitdefenderoverride
+                    "sentineloneoverride",
+                    !row.sentineloneoverride
                   )
                 }
                 className="cursor-pointer h-5 w-5"
               />
               <label className="text-lg font-medium">
-                {row.bitdefenderoverride ? "Yes" : "No"}
+                {row.sentineloneoverride ? "Yes" : "No"}
               </label>
             </div>
           </TableCell>
@@ -201,12 +201,12 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
             <Input
               placeholder="Number"
               type="text"
-              value={row.bitdefenderoverridecount}
+              value={row.sentineloneoverridecount}
               onChange={(e) => {
                 const value = parseInt(e.target.value);
                 handleInputChange(
                   row.id,
-                  "bitdefenderoverridecount",
+                  "sentineloneoverridecount",
                   isNaN(value) ? 0 : value
                 );
               }}
@@ -219,8 +219,8 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
               onClick={() =>
                 handleSave(
                   row.id,
-                  row.bitdefenderoverride,
-                  row.bitdefenderoverridecount
+                  row.sentineloneoverride,
+                  row.sentineloneoverridecount
                 )
               }
             >
@@ -248,7 +248,7 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[150px] text-xs border border-gray-300">
-                  Bitdefender Customer
+                  SentinelOne Customer
                 </TableHead>
                 <TableHead className="w-[150px] text-xs border border-gray-300">
                   Halo Customer
