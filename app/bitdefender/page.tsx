@@ -24,6 +24,7 @@ export default async function ProtectedPage() {
     return <div>Error loading data</div>;
   }
 
+
   return (
     <div className="flex-1 w-full flex flex-col gap-10 items-center">
       <div className="w-full">
@@ -38,7 +39,7 @@ export default async function ProtectedPage() {
           </div>
         </nav>
       </div>
-      <div className="w-full flex justify-center items-center p-3 text-sm flex-col min-h-screen">
+      <div className="w-full  flex justify-center items-center p-3 text-sm flex-col min-h-screen">
         <div className="flex-1 flex justify-center items-center w-full">
           <TableForm data={mappingData} />
         </div>

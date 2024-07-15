@@ -17,11 +17,18 @@ export const getSupabaseTableMapping = () => {
 };
 
 export const toggleClientDisabledStatus = (data: any) => {
-  return httpCommon.post(`/supabase/toggle-client-disabled-status`, data);
+  const url = `/supabase/toggle-client-disabled-status?client_id=${data.client_id}`;
+  return httpCommon.put(url);
 };
 
-export const setOverrideStatus = (data: any) => {
-  return httpCommon.post(`/supabase/set-override-status`, data);
+export const setBitdefenderOverrideStatus = (data: any) => {
+  const url = `/supabase/set-bitdefender-override-status?client_id=${data.client_id}&enable=${data.enable}&count=${data.count}`;
+  return httpCommon.put(url);
+};
+
+export const setSentinelOneOverrideStatus = (data: any) => {
+  const url = `/supabase/set-sentinelone-override-status?client_id=${data.client_id}&enable=${data.enable}&count=${data.count}`;
+  return httpCommon.put(url);
 };
 
 const MiddlewareService = {
@@ -30,7 +37,8 @@ const MiddlewareService = {
   getSentinelOneCustomers,
   getSupabaseTableMapping,
   toggleClientDisabledStatus,
-  setOverrideStatus,
+  setBitdefenderOverrideStatus,
+  setSentinelOneOverrideStatus,
 };
 
 export default MiddlewareService;
