@@ -1,8 +1,8 @@
+import MiddlewareService from "@/api/middleware";
 import AuthButton from "@/components/AuthButton";
 import { createClient } from "@/utils/supabase/server";
-import { Select } from "@/components/Select";
-import Header from "@/components/Header";
 import { redirect } from "next/navigation";
+import TableForm from "@/components/TableForm";
 
 export default async function ProtectedPage() {
   const supabase = createClient();
@@ -15,27 +15,34 @@ export default async function ProtectedPage() {
     return redirect("/login");
   }
 
+  const { data: mappingData, error } = await supabase
+    .from("mapping")
+    .select("*");
+
+  if (error) {
+    console.error("Error fetching mapping data:", error);
+    return <div>Error loading data</div>;
+  }
+
   return (
-    <div className="flex-1 w-full flex flex-col gap-20 items-center">
+    <div className="flex-1 w-full flex flex-col gap-10 items-center">
       <div className="w-full">
         <div className="py-6 font-bold bg-[#0C797D] text-center text-white">
           This is a protected page that you can only see as an authenticated
           user
         </div>
         <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
-          <div className="w-full max-w-4xl flex justify-end items-end p-3 text-sm">
+          <div className="w-full max-w-4xl flex justify-between items-end p-3 text-sm">
+            <h1 className="font-bold text-lg">Bitdefender Customer Mapping</h1>
             <AuthButton />
           </div>
         </nav>
       </div>
-
-      <div className="flex-1 flex flex-col gap-20 max-w-4xl px-3">
-        <Header />
-        <main className="flex-1 flex flex-col gap-6">
-          <Select />
-        </main>
+      <div className="w-full flex justify-center items-center p-3 text-sm flex-col min-h-screen">
+        <div className="flex-1 flex justify-center items-center w-full">
+          <TableForm data={mappingData} />
+        </div>
       </div>
-
       <footer className="w-full border-t border-t-foreground/10 p-8 flex justify-center text-center text-xs">
         <p>
           Powered by{" "}
