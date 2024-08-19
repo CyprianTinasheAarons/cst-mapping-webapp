@@ -54,19 +54,17 @@ export default async function ProtectedPage() {
           <Select />
         </main>
       </div>
-
-      <footer className="w-full border-t border-t-foreground/10 p-8 flex justify-center text-center text-xs">
-        <p>
-          Powered by{" "}
-          <a
-            href="https://supabase.com/?utm_source=create-next-app&utm_medium=template&utm_term=nextjs"
-            target="_blank"
-            className="font-bold hover:underline"
-            rel="noreferrer"
-          >
-            Supabase
-          </a>
-        </p>
+<footer className="w-full bg-[#333333] text-white py-8">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row items-center justify-between">
+            <div className="mb-4 md:mb-0">
+              <Image src="/cst_logo_white.svg" alt="CST Logo" width={120} height={40} />
+            </div>
+            <div className="text-sm">
+              <p>&copy; 2024 CST Ltd. All rights reserved.</p>
+            </div>
+          </div>
+        </div>
       </footer>
     </div>
   );
