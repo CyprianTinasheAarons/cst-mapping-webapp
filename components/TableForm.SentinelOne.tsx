@@ -72,7 +72,6 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
         client_id: rowId,
       });
       if (response.status === 200) {
-        // Handle successful response
         console.log("Disabled status updated successfully");
         toast({
           title: "Success",
@@ -80,7 +79,6 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
         });
         router.refresh();
       } else {
-        // Handle error response
         console.error("Failed to update disabled status");
         toast({
           title: "Error",
@@ -110,7 +108,6 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
         count: overrideCount,
       });
       if (response.status === 200) {
-        // Handle successful response
         console.log("Override count updated successfully");
         toast({
           title: "Success",
@@ -118,7 +115,6 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
         });
         router.refresh();
       } else {
-        // Handle error response
         console.error("Failed to update override count");
         toast({
           title: "Error",
@@ -161,26 +157,26 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
       .slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
       .map((row) => (
         <TableRow key={row.id}>
-          <TableCell className="w-[150px] text-xs border border-gray-300">
+          <TableCell className="w-[150px] text-xs border border-[#0C797D]/20">
             {row.sentinelonename}
           </TableCell>
-          <TableCell className="w-[150px] text-xs border border-gray-300">
+          <TableCell className="w-[150px] text-xs border border-[#0C797D]/20">
             {row.name}
           </TableCell>
-          <TableCell className="w-[150px] text-sm border border-gray-300 p-4">
+          <TableCell className="w-[150px] text-sm border border-[#0C797D]/20 p-4">
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
                 checked={row.sentinelonedisabled}
                 onChange={() => handleToggleDisabledStatus(row.id)}
-                className="cursor-pointer h-5 w-5"
+                className="cursor-pointer h-5 w-5 text-[#0C797D] border-[#0C797D] rounded focus:ring-[#0C797D]"
               />
-              <label className="text-lg font-medium">
+              <label className="text-xs uppercase text-[#0C797D]">
                 {row.sentinelonedisabled ? "Yes" : "No"}
               </label>
             </div>
           </TableCell>
-          <TableCell className="w-[150px] text-sm border border-gray-300 p-4">
+          <TableCell className="w-[150px] text-sm border border-[#0C797D]/20 p-4">
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
@@ -192,14 +188,14 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
                     !row.sentineloneoverride
                   )
                 }
-                className="cursor-pointer h-5 w-5"
+                className="cursor-pointer h-5 w-5 text-[#0C797D] border-[#0C797D] rounded focus:ring-[#0C797D]"
               />
-              <label className="text-lg font-medium">
+              <label className="text-xs uppercase text-[#0C797D]">
                 {row.sentineloneoverride ? "Yes" : "No"}
               </label>
             </div>
           </TableCell>
-          <TableCell className="w-[150px] text-xs border border-gray-300">
+          <TableCell className="w-[150px] text-xs border border-[#0C797D]/20">
             <Input
               placeholder="Number"
               type="text"
@@ -212,10 +208,11 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
                   isNaN(value) ? 0 : value
                 );
               }}
+              className="border-[#0C797D] focus:ring-[#0C797D] focus:border-[#0C797D]"
             />
           </TableCell>
 
-          <TableCell className="w-[150px] text-xs border border-gray-300 cursor-pointer">
+          <TableCell className="w-[150px] text-xs border border-[#0C797D]/20 cursor-pointer">
             <Button
               variant="outline"
               onClick={() =>
@@ -225,6 +222,7 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
                   row.sentineloneoverridecount
                 )
               }
+              className="bg-[#0C797D] text-white hover:bg-[#0C797D]/80 w-full"
             >
               Save
             </Button>
@@ -235,37 +233,36 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
 
   return (
     <div className="flex justify-center items-center flex-col min-h-[90vh]">
-      <div className="sticky top-0 bg-white z-10 w-full">
+      <div className="sticky top-0 bg-white z-10 w-full p-4 shadow-md">
         <Input
           placeholder="Search..."
           value={searchTerm}
           onChange={handleSearchChange}
-          className="mb-4"
-        />{" "}
-        <div className="mt-2 text-sm text-right py-2">
+          className="mb-4 border-[#0C797D] focus:ring-[#0C797D] focus:border-[#0C797D]"
+        />
+        <div className="mt-2 text-sm text-right py-2 text-[#0C797D]">
           Page {currentPage} of {totalPages}
         </div>
         <div className="overflow-x-auto w-full">
-          <Table className="border border-gray-300">
+          <Table className="border border-[#0C797D]/20">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[150px] text-xs border border-gray-300">
+                <TableHead className="w-[150px] text-xs border border-[#0C797D]/20 bg-[#0C797D] text-white">
                   SentinelOne Customer
                 </TableHead>
-                <TableHead className="w-[150px] text-xs border border-gray-300">
+                <TableHead className="w-[150px] text-xs border border-[#0C797D]/20 bg-[#0C797D] text-white">
                   Halo Customer
                 </TableHead>
-                <TableHead className="w-[150px] text-xs border border-gray-300">
+                <TableHead className="w-[150px] text-xs border border-[#0C797D]/20 bg-[#0C797D] text-white">
                   Disable Sync?
                 </TableHead>
-                <TableHead className="w-[150px] text-xs border border-t-gray-300">
+                <TableHead className="w-[150px] text-xs border border-[#0C797D]/20 bg-[#0C797D] text-white">
                   Override
                 </TableHead>
-                <TableHead className="w-[150px] text-xs border border-t-gray-300">
+                <TableHead className="w-[150px] text-xs border border-[#0C797D]/20 bg-[#0C797D] text-white">
                   Override Amount
                 </TableHead>
-
-                <TableHead className="w-[150px] text-xs border border-gray-300">
+                <TableHead className="w-[150px] text-xs border border-[#0C797D]/20 bg-[#0C797D] text-white">
                   Save Override
                 </TableHead>
               </TableRow>
@@ -274,7 +271,7 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
         </div>
       </div>
       <div className="overflow-x-auto w-full flex-1">
-        <Table className="border border-gray-300">
+        <Table className="border border-[#0C797D]/20">
           <TableBody>{renderRows()}</TableBody>
         </Table>
       </div>
@@ -286,31 +283,38 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
               <PaginationPrevious
                 href="#"
                 onClick={() => handlePageChange(currentPage - 1)}
+                className="text-[#0C797D] hover:bg-[#0C797D]/10"
               />
             </PaginationItem>
             <PaginationItem>
-              <PaginationLink href="#" onClick={() => handlePageChange(1)}>
+              <PaginationLink
+                href="#"
+                onClick={() => handlePageChange(1)}
+                className="text-[#0C797D] hover:bg-[#0C797D]/10"
+              >
                 1
               </PaginationLink>
             </PaginationItem>
             <PaginationItem>
-              <PaginationEllipsis />
+              <PaginationEllipsis className="text-[#0C797D]" />
             </PaginationItem>
             <PaginationItem>
               <PaginationLink
                 href="#"
                 onClick={() => handlePageChange(Math.ceil(totalPages / 2))}
+                className="text-[#0C797D] hover:bg-[#0C797D]/10"
               >
                 {Math.ceil(totalPages / 2)}
               </PaginationLink>
             </PaginationItem>
             <PaginationItem>
-              <PaginationEllipsis />
+              <PaginationEllipsis className="text-[#0C797D]" />
             </PaginationItem>
             <PaginationItem>
               <PaginationLink
                 href="#"
                 onClick={() => handlePageChange(totalPages)}
+                className="text-[#0C797D] hover:bg-[#0C797D]/10"
               >
                 {totalPages}
               </PaginationLink>
@@ -319,6 +323,7 @@ const TableForm: React.FC<TableFormProps> = ({ data }) => {
               <PaginationNext
                 href="#"
                 onClick={() => handlePageChange(currentPage + 1)}
+                className="text-[#0C797D] hover:bg-[#0C797D]/10"
               />
             </PaginationItem>
           </PaginationContent>

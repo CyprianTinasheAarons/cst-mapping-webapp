@@ -1,9 +1,10 @@
 import AuthButton from "@/components/AuthButton";
 import { createClient } from "@/utils/supabase/server";
+import { Select } from "@/components/Select";
+import Header from "@/components/Header";
 import { redirect } from "next/navigation";
-import TableForm from "@/components/TableForm.SentinelOne";
-import Image from "next/image";
 import Link from "next/link";
+import Image from "next/image";
 
 export default async function ProtectedPage() {
   const supabase = createClient();
@@ -14,15 +15,6 @@ export default async function ProtectedPage() {
 
   if (!user) {
     return redirect("/");
-  }
-
-  const { data: mappingData, error } = await supabase
-    .from("mapping")
-    .select("*");
-
-  if (error) {
-    console.error("Error fetching mapping data:", error);
-    return <div>Error loading data</div>;
   }
 
   return (
@@ -36,13 +28,13 @@ export default async function ProtectedPage() {
               </div>
               <div className="flex items-center">
                 <div className="hidden md:ml-6 md:flex md:space-x-8">
-                  <Link href="/home" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest">
+                  <Link href="/home" className="border-[#0C797D] text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest">
                     Dashboard
                   </Link>
                   <Link href="/bitdefender" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest">
                     Bitdefender
                   </Link>
-                  <Link href="/sentinelone" className="border-[#0C797D] text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest">
+                  <Link href="/sentinelone" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest">
                     Sentinelone
                   </Link>
                 </div>
@@ -53,14 +45,14 @@ export default async function ProtectedPage() {
             </div>
           </div>
         </nav>
-        <div className="py-6  bg-[#0C797D] text-center text-white text-2xl font-light">
-          SentinelOne Customer Mapping
-        </div>
+       
       </div>
-      <div className="w-full  flex justify-center items-center p-3 text-sm flex-col min-h-screen">
-        <div className="flex-1 flex justify-center items-center w-full">
-          <TableForm data={mappingData} />
-        </div>
+
+      <div className="flex-1 flex flex-col gap-2 max-w-4xl px-3">
+        <Header />
+        <main className="flex-1 flex flex-col gap-6">
+          <Select />
+        </main>
       </div>
 
       <footer className="w-full border-t border-t-foreground/10 p-8 flex justify-center text-center text-xs">
