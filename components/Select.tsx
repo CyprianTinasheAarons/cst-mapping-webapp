@@ -11,14 +11,27 @@ export function Select() {
 export const projects = [
   {
     title: "Bitdefender",
-    description:
-      "A cybersecurity technology company that provides advanced threat protection solutions.",
+    description: "",
     link: "/bitdefender",
   },
   {
     title: "SentinelOne",
-    description:
-      "A cybersecurity company that offers endpoint protection and response solutions.",
+    description: "",
     link: "/sentinelone",
+  },
+  {
+    title: "Duo",
+    description: "",
+    link: "/duo",
+  },
+  {
+    title: "Ingram",
+    description: "",
+    link: "/ingram",
+  },
+  {
+    title: "Gamma",
+    description: "",
+    link: "/gamma",
   },
 ];
