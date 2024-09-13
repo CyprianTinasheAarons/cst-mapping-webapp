@@ -31,27 +31,45 @@ export default async function ProtectedPage() {
         <nav className="bg-white shadow-lg">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-16">
-              <div className="flex-shrink-0 flex items-center">
-                <Image className="h-8 w-auto" src="/cst_logo.svg" alt="CST Logo" width={259} height={39} />
-              </div>
+              <Link href="/home" className="flex-shrink-0 flex items-center">
+                <Image
+                  className="h-8 w-auto"
+                  src="/cst_logo.svg"
+                  alt="CST Logo"
+                  width={259}
+                  height={39}
+                />
+              </Link>
               <div className="flex items-center">
                 <div className="hidden md:ml-6 md:flex md:space-x-8">
-                  <Link href="/home" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest">
-                    Dashboard
-                  </Link>
-                  <Link href="/bitdefender" className="border-[#0C797D] text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest">
+                  <Link
+                    href="/bitdefender"
+                    className="border-[#0C797D] text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest"
+                  >
                     Bitdefender
                   </Link>
-                  <Link href="/sentinelone" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest">
+                  <Link
+                    href="/sentinelone"
+                    className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest"
+                  >
                     Sentinelone
                   </Link>
-                  <Link href="/duo" className="border-[#0C797D] text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest">
+                  <Link
+                    href="/duo"
+                    className="border-[#0C797D] text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest"
+                  >
                     Duo
                   </Link>
-                  <Link href="/ingram" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest">
+                  <Link
+                    href="/ingram"
+                    className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest"
+                  >
                     Ingram
                   </Link>
-                  <Link href="/gamma" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest">
+                  <Link
+                    href="/gamma"
+                    className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium uppercase tracking-widest"
+                  >
                     Gamma
                   </Link>
                 </div>
@@ -75,7 +93,12 @@ export default async function ProtectedPage() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between">
             <div className="mb-4 md:mb-0">
-              <Image src="/cst_logo_white.svg" alt="CST Logo" width={120} height={40} />
+              <Image
+                src="/cst_logo_white.svg"
+                alt="CST Logo"
+                width={120}
+                height={40}
+              />
             </div>
             <div className="text-sm">
               <p>&copy; 2024 CST Ltd. All rights reserved.</p>

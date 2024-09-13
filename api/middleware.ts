@@ -12,6 +12,119 @@ export const getHaloClients = (data: any) => {
   return httpCommon.get(`/halo`, data);
 };
 
+/**
+ * Fetches Halo items data
+ * @returns {Promise} - Promise resolving to the Halo items data
+ */
+export const getHaloItems = () => {
+  return httpCommon.get(`/halo/items`);
+};
+
+/**
+ * Fetches Halo contracts data
+ * @param {string} search - Optional search parameter
+ * @returns {Promise} - Promise resolving to the Halo contracts data
+ */
+export const getHaloContracts = (search?: string) => {
+  const params = search ? { search } : undefined;
+  return httpCommon.get(`/halo/contracts`, { params });
+};
+
+/**
+ * Creates a Halo recurring invoice template
+ * @param {Record<string, any>} data - The data for creating the recurring invoice template
+ * @returns {Promise} - Promise resolving to the created recurring invoice template
+ */
+export const createHaloRecurringInvoiceTemplate = () => {
+  return httpCommon.post(`/halo/recurring-invoice-template`);
+};
+
+/**
+ * Creates a Halo recurring invoice
+ * @param {number} clientId - The ID of the client
+ * @param {string} contractId - The ID of the contract
+ * @param {Array<{ id: number, count: number, accountsid: string, baseprice: number }>} items - The items for the recurring invoice
+ * @returns {Promise} - Promise resolving to the created recurring invoice
+ */
+export const createHaloRecurringInvoice = (
+  clientId: number,
+  contractId: string,
+  items: Array<{
+    id: number;
+    count: number;
+    accountsid: string;
+    baseprice: number;
+  }>
+) => {
+  return httpCommon.post(`/halo/recurring-invoice`, items, {
+    params: {
+      client_id: clientId,
+      contract_id: contractId,
+    },
+  });
+};
+
+/**
+ * Fetches a specific Ingram Halo item by ID
+ * @param {number} itemId - The ID of the Ingram Halo item
+ * @returns {Promise} - Promise resolving to the specific Ingram Halo item data
+ */
+export const getIngramHaloItem = (itemId: number) => {
+  return httpCommon.get(`/supabase/ingram-halo-item/${itemId}`);
+};
+
+// ---- Ingram API ----
+
+/**
+ * Fetches Ingram clients data
+ * @returns {Promise} - Promise resolving to the Ingram clients data
+ */
+export const getIngramClients = () => {
+  return httpCommon.get(`/ingram`);
+};
+
+/**
+ * Updates the Ingram Halo customer sync status
+ * @param {number} customerId - The ID of the customer
+ * @param {boolean} synced - The sync status
+ * @param {Object} haloDetails - Additional details for the Halo customer
+ * @returns {Promise} - Promise resolving to the updated customer record
+ */
+export const updateIngramHaloCustomerSync = (
+  customerId: number,
+  synced = true,
+  haloDetails?: Record<string, any>
+) =>
+  httpCommon.put(`/supabase/update-ingram-halo-customer-sync/${customerId}`, {
+    customer_halo_id: haloDetails?.customer_halo_id,
+    halo_name: haloDetails?.halo_name,
+  });
+
+/**
+ * Fetches Ingram subscriptions for a specific customer
+ * @param {string} customerId - The ID of the customer
+ * @returns {Promise} - Promise resolving to the Ingram subscriptions data
+ */
+export const getIngramSubscriptions = (customerId: string) => {
+  return httpCommon.get(`/ingram/subscriptions/${customerId}`);
+};
+
+/**
+ * Fetches all Ingram Halo customers data
+ * @returns {Promise} - Promise resolving to the Ingram Halo customers data
+ */
+export const getIngramHaloCustomers = () => {
+  return httpCommon.get(`/supabase/ingram-halo-customers`);
+};
+
+/**
+ * Fetches all Ingram Halo items data
+ * @returns {Promise} - Promise resolving to the Ingram Halo items data
+ */
+export const getAllIngramHaloItems = () => {
+  return httpCommon.get(`/supabase/ingram-halo-items`);
+};
+
 // ---- Bitdefender API ----
 
 /**
@@ -121,8 +234,19 @@ export const setDuoOverrideStatus = (data: any) => {
 
 // ---- Middleware Service Object ----
 
+/**
+ * Updates the Ingram Halo item mapping
+ * @param {Object} data - The data to update
+ * @returns {Promise} - Promise resolving to the updated item record
+ */
+export const updateIngramHaloItem = (data: Record<string, any>) =>
+  httpCommon.put(`/supabase/update-ingram-halo-item`, data);
+
 const MiddlewareService = {
   getHaloClients,
+  getHaloItems,
+  getIngramClients,
+  getIngramSubscriptions,
   getBitdefenderCompaniesWithDeviceCount,
   getSentinelOneCustomers,
   getSupabaseTableMapping,
@@ -133,6 +257,14 @@ const MiddlewareService = {
   toggleDuoDisabledStatus,
   setDuoOverrideStatus,
   getDuoCustomers,
+  getIngramHaloCustomers,
+  updateIngramHaloCustomerSync,
+  getHaloContracts,
+  createHaloRecurringInvoice,
+  createHaloRecurringInvoiceTemplate,
+  updateIngramHaloItem,
+  getAllIngramHaloItems,
+  getIngramHaloItem,
 };
 
 export default MiddlewareService;

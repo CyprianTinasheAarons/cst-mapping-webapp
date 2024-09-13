@@ -1,6 +1,5 @@
-import { GeistSans } from "geist/font/sans";
-import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
+import { ClientRoot } from "./ClientRoot";
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -18,12 +17,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={GeistSans.className}>
-      <body className="bg-background text-foreground">
-        <main className="min-h-screen flex flex-col items-center">
-          {children}
-          <Toaster />
-        </main>
+    <html lang="en">
+      <body>
+        <ClientRoot>{children}</ClientRoot>
       </body>
     </html>
   );
