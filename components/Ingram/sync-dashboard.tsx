@@ -4,13 +4,6 @@ import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -101,12 +94,17 @@ export function SyncDashboard() {
     (customer) =>
       customer.ingram_name
         .toLowerCase()
-        .includes(subscriptionSearch.toLowerCase()) ||
-      customer.customer_ingram_id.includes(subscriptionSearch) ||
+        .includes(customerSearch.toLowerCase()) ||
+      customer.customer_ingram_id.includes(customerSearch) ||
       (customer.subscriptions || []).some((sub: any) =>
-        sub.item_ingram_name.toLowerCase().includes(subscriptionSearch.toLowerCase())
+        sub.item_ingram_name
+          .toLowerCase()
+          .includes(customerSearch.toLowerCase())
       )
   );
+
+  const totalFilteredCustomers = filteredCustomers.length;
+  const totalPages = Math.ceil(totalFilteredCustomers / itemsPerPage);
 
   const paginatedCustomers = filteredCustomers.slice(
     (currentPage - 1) * itemsPerPage,
@@ -366,7 +364,10 @@ export function SyncDashboard() {
                         placeholder="Search customers"
                         className="max-w-2xl"
                         value={customerSearch}
-                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value);
+                          setCurrentPage(1); // Reset to first page on new search
+                        }}
                       />
                       <Button variant="outline" size="icon">
                         <Search className="h-4 w-4" />
@@ -466,7 +467,7 @@ export function SyncDashboard() {
                   </Table>
                   <PaginationComponent
                     currentPage={currentPage}
-                    totalItems={filteredCustomers.length}
+                    totalItems={totalFilteredCustomers}
                     itemsPerPage={itemsPerPage}
                     onPageChange={setCurrentPage}
                   />
@@ -591,17 +592,28 @@ export function SyncDashboard() {
                                           ) : (
                                             <ComboboxDemo
                                               options={haloItemOptions}
-                                              
                                               onSelect={(value) => {
-                                                console.log("Selected value:", value);
+                                                console.log(
+                                                  "Selected value:",
+                                                  value
+                                                );
                                                 const selectedItem =
                                                   haloItems.find(
-                                                    (item) => item.name === value
+                                                    (item) =>
+                                                      item.name === value
                                                   );
-                                                console.log("Selected item:", selectedItem);
-                                                console.log("Halo Items:", haloItems);
+                                                console.log(
+                                                  "Selected item:",
+                                                  selectedItem
+                                                );
+                                                console.log(
+                                                  "Halo Items:",
+                                                  haloItems
+                                                );
                                                 if (selectedItem) {
-                                                  console.log("Handling Halo item select");
+                                                  console.log(
+                                                    "Handling Halo item select"
+                                                  );
                                                   handleHaloItemSelect(
                                                     subscription.id,
                                                     selectedItem.id,
@@ -731,7 +743,7 @@ export function SyncDashboard() {
                   </Table>
                   <PaginationComponent
                     currentPage={currentPage}
-                    totalItems={filteredCustomers.length}
+                    totalItems={totalFilteredCustomers}
                     itemsPerPage={itemsPerPage}
                     onPageChange={setCurrentPage}
                   />
