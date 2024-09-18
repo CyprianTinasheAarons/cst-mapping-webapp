@@ -5,7 +5,9 @@ export const fetchGammaCustomers = createAsyncThunk(
   "gamma/fetchCustomers",
   async () => {
     const response = await GammaService.getGammaCustomers();
-    return response.data;
+    return response.data.sort((a: GammaCustomer, b: GammaCustomer) =>
+      a.gamma_name.localeCompare(b.gamma_name)
+    );
   }
 );
 

@@ -45,6 +45,10 @@ export function ComboboxDemo({
     setValue(selectedValue || "");
   }, [selectedValue]);
 
+  if (!options || options.length === 0) {
+    return <div>Loading options...</div>;
+  }
+
   const handleInputChange = (input: string) => {
     const filtered = options.filter((option) =>
       option.label.toLowerCase().includes(input.toLowerCase())

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, MoreHorizontal, AlertCircle } from "lucide-react";
+import { Search, AlertCircle, RefreshCw, X } from "lucide-react";
 import {
   Pagination,
   PaginationContent,
@@ -41,6 +41,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -54,7 +61,7 @@ import {
 import { BeatLoader } from "react-spinners";
 import { ComboboxDemo } from "@/components/ui/combobox";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Pencil, Lock, Hash, Unlock } from "lucide-react";
+import { Lock, Hash, Unlock } from "lucide-react";
 
 export function SyncDashboard() {
   const [customerSearch, setCustomerSearch] = React.useState("");
@@ -62,6 +69,7 @@ export function SyncDashboard() {
   const [currentPage, setCurrentPage] = React.useState(1);
   const itemsPerPage = 10;
   const [isSyncing, setIsSyncing] = useState(false);
+
   const [syncedCustomer, setSyncedCustomer] = useState<string | null>(null);
   const [selectedAgreement, setSelectedAgreement] = useState<any | null>(null);
   const [overrideCounts, setOverrideCounts] = useState<Record<string, number>>(
@@ -95,17 +103,19 @@ export function SyncDashboard() {
       dispatch(fetchHaloItems());
     }
   }, [haloStatus]);
+
   const filteredCustomers = ingramClients.filter(
     (customer) =>
       (customer.ingram_name?.toLowerCase() ?? "").includes(
         customerSearch.toLowerCase()
-      ) ||
-      (customer.customer_ingram_id ?? "").includes(customerSearch) ||
-      (customer.subscriptions || []).some((sub: any) =>
-        (sub.item_ingram_name?.toLowerCase() ?? "").includes(
-          customerSearch.toLowerCase()
-        )
-      )
+      ) || (customer.customer_ingram_id ?? "").includes(customerSearch)
+  );
+
+  const filteredSubscriptions = ingramSubscriptions.filter(
+    (subscription) =>
+      (subscription.item_ingram_name?.toLowerCase() ?? "").includes(
+        subscriptionSearch.toLowerCase()
+      ) || (subscription.item_ingram_id ?? "").includes(subscriptionSearch)
   );
 
   const totalFilteredCustomers = filteredCustomers.length;
@@ -141,6 +151,7 @@ export function SyncDashboard() {
             customerId,
             haloId: selectedHalo.id,
             haloName: selectedHalo.name,
+            synced: true,
           })
         ).unwrap();
         setSyncedCustomer(selectedHalo.name);
@@ -152,6 +163,33 @@ export function SyncDashboard() {
         toast.success(`Successfully synced with ${selectedHalo.name}`);
       } catch (error) {
         toast.error("Sync failed. Please try again.");
+      } finally {
+        setIsSyncing(false);
+      }
+    }
+  };
+
+  const handleUnsyncChanges = async (customerId: number) => {
+    if (!isSyncing) {
+      setIsSyncing(true);
+      try {
+        await dispatch(
+          updateIngramHaloCustomerSync({
+            customerId,
+            haloId: "",
+            haloName: "",
+            synced: false,
+          })
+        ).unwrap();
+        setSyncedCustomer(null);
+
+        // Fetch updated Halo state
+        await dispatch(fetchHaloClients({}));
+        await dispatch(fetchHaloItems());
+
+        toast.success("Successfully unsynced customer");
+      } catch (error) {
+        toast.error("Unsync failed. Please try again.");
       } finally {
         setIsSyncing(false);
       }
@@ -245,64 +283,67 @@ export function SyncDashboard() {
     }
   };
 
-    const handleUpdateSubscriptionDisabled = async (
-      subscriptionId: string,
-      value: boolean
-    ) => {
-      try {
-        await dispatch(
-          updateIngramHaloItem({
-            id: parseInt(subscriptionId),
-            disabled: value,
-          })
-        ).unwrap();
+  const handleUpdateSubscriptionDisabled = async (
+    subscriptionId: string,
+    value: boolean,
+    subscription: any
+  ) => {
+    try {
+      await dispatch(
+        updateIngramHaloItem({
+          id: parseInt(subscriptionId),
+          disabled: value,
+          ...subscription, // Include all other subscription details
+        })
+      ).unwrap();
 
-        // Fetch updated Gamma state
-        await dispatch(fetchIngramClients());
-        await dispatch(fetchIngramHaloItems());
+      // Fetch updated Ingram state
+      await dispatch(fetchIngramClients());
+      await dispatch(fetchIngramHaloItems());
 
-        toast.success(
-          `Successfully updated disabled status for subscription ${subscriptionId}`
-        );
-      } catch (error) {
-        console.error("Error updating disabled status:", error);
-        toast.error("Failed to update disabled status. Please try again.");
-      }
-    };
+      toast.success(
+        `Successfully updated disabled status for subscription ${subscriptionId}`
+      );
+    } catch (error) {
+      console.error("Error updating disabled status:", error);
+      toast.error("Failed to update disabled status. Please try again.");
+    }
+  };
 
-    const handleUpdateSubscriptionOverride = async (
-      subscriptionId: string,
-      override: boolean,
-      overrideCount: number | null
-    ) => {
-      try {
-        await dispatch(
-          updateIngramHaloItem({
-            id: parseInt(subscriptionId),
-            override,
-            override_count: overrideCount,
-          })
-        ).unwrap();
+  const handleUpdateSubscriptionOverride = async (
+    subscriptionId: string,
+    override: boolean,
+    overrideCount: number | null,
+    subscription: any
+  ) => {
+    try {
+      await dispatch(
+        updateIngramHaloItem({
+          id: parseInt(subscriptionId),
+          override,
+          override_count: overrideCount,
+          ...subscription, // Include all other subscription details
+        })
+      ).unwrap();
 
-        // Update local state
-        setOverrideCounts((prev) => ({
-          ...prev,
-          [subscriptionId]: overrideCount ?? 0,
-        }));
+      // Update local state
+      setOverrideCounts((prev) => ({
+        ...prev,
+        [subscriptionId]: overrideCount ?? 0,
+      }));
 
-        // Fetch updated Gamma state
-        await dispatch(fetchIngramClients());
-        await dispatch(fetchIngramHaloItems());
+      // Fetch updated Ingram state
+      await dispatch(fetchIngramClients());
+      await dispatch(fetchIngramHaloItems());
 
-        toast.success(
-          `Successfully updated override for subscription ${subscriptionId}`
-        );
-      } catch (error) {
-        console.error("Error updating override:", error);
-        toast.error("Failed to update override. Please try again.");
-      }
-    };
-
+      toast.success(
+        `Successfully updated override for subscription ${subscriptionId}`
+      );
+    } catch (error) {
+      console.error("Error updating override:", error);
+      toast.error("Failed to update override. Please try again.");
+    }
+  };
 
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
 
@@ -433,6 +474,7 @@ export function SyncDashboard() {
                           setCurrentPage(1); // Reset to first page on new search
                         }}
                       />
+
                       <Button variant="outline" size="icon">
                         <Search className="h-4 w-4" />
                       </Button>
@@ -482,7 +524,7 @@ export function SyncDashboard() {
                                       "Handling Halo customer select"
                                     );
                                     handleHaloCustomerSelect(
-                                      customer.id,
+                                      customer.id.toString(),
                                       selectedHalo.id,
                                       selectedHalo.name
                                     );
@@ -496,17 +538,26 @@ export function SyncDashboard() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button variant="ghost" size="sm">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-40">
-                                <div className="flex flex-col space-y-2">
+                            <Button variant="ghost" size="sm">
+                              <div className="flex items-center space-x-4">
+                                {customer.synced ? (
                                   <Button
-                                    variant="ghost"
+                                    variant="outline"
                                     size="sm"
+                                    className="bg-red-200 text-black hover:bg-red-100"
+                                    onClick={() =>
+                                      handleUnsyncChanges(customer.id)
+                                    }
+                                    disabled={isSyncing}
+                                  >
+                                    <X className="h-4 w-4 mr-2" />
+                                    Unsync
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="bg-blue-200 text-black hover:bg-blue-100"
                                     onClick={() =>
                                       handleSyncChanges(customer.id)
                                     }
@@ -515,15 +566,12 @@ export function SyncDashboard() {
                                       isSyncing
                                     }
                                   >
-                                    {isSyncing ? (
-                                      <BeatLoader color="#0C797D" size={8} />
-                                    ) : (
-                                      "Sync Changes"
-                                    )}
+                                    <RefreshCw className="h-4 w-4 mr-2" />
+                                    Sync
                                   </Button>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
+                                )}
+                              </div>
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -541,10 +589,13 @@ export function SyncDashboard() {
                   <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center space-x-2">
                       <Input
-                        placeholder="Search companies"
+                        placeholder="Search customers"
                         className="max-w-2xl"
-                        value={subscriptionSearch}
-                        onChange={(e) => setSubscriptionSearch(e.target.value)}
+                        value={customerSearch}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value);
+                          setCurrentPage(1); // Reset to first page on new search
+                        }}
                       />
                       <Button variant="outline" size="icon">
                         <Search className="h-4 w-4" />
@@ -566,7 +617,7 @@ export function SyncDashboard() {
                             </p>
                           </TableCell>
                         </TableRow>
-                      ) : paginatedCustomers.length === 0 ? (
+                      ) : filteredCustomers.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={4} className="text-center py-8">
                             <p className="text-sm text-muted-foreground">
@@ -575,7 +626,7 @@ export function SyncDashboard() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        paginatedCustomers.map((customer) => (
+                        filteredCustomers.map((customer) => (
                           <React.Fragment key={customer.customer_ingram_id}>
                             <TableRow>
                               <TableCell
@@ -592,7 +643,7 @@ export function SyncDashboard() {
                                     </span>
                                   </div>
                                   <Badge variant="outline">
-                                    {ingramSubscriptions.filter(
+                                    {filteredSubscriptions.filter(
                                       (sub) =>
                                         sub.customer_ingram_id ===
                                         customer.customer_ingram_id
@@ -617,12 +668,12 @@ export function SyncDashboard() {
                               </TableCell>
                             </TableRow>
 
-                            {ingramSubscriptions.filter(
+                            {filteredSubscriptions.filter(
                               (sub) =>
                                 sub.customer_ingram_id ===
                                 customer.customer_ingram_id
                             ).length > 0 ? (
-                              ingramSubscriptions
+                              filteredSubscriptions
                                 .filter(
                                   (sub) =>
                                     sub.customer_ingram_id ===
@@ -657,27 +708,13 @@ export function SyncDashboard() {
                                             <ComboboxDemo
                                               options={haloItemOptions}
                                               onSelect={(value) => {
-                                                console.log(
-                                                  "Selected value:",
-                                                  value
-                                                );
                                                 const selectedItem =
                                                   haloItems.find(
                                                     (item) =>
                                                       item.name === value
                                                   );
-                                                console.log(
-                                                  "Selected item:",
-                                                  selectedItem
-                                                );
-                                                console.log(
-                                                  "Halo Items:",
-                                                  haloItems
-                                                );
+
                                                 if (selectedItem) {
-                                                  console.log(
-                                                    "Handling Halo item select"
-                                                  );
                                                   handleHaloItemSelect(
                                                     subscription.id,
                                                     selectedItem.id,
@@ -699,7 +736,7 @@ export function SyncDashboard() {
                                                 variant="outline"
                                                 size="icon"
                                               >
-                                                <MoreHorizontal className="h-4 w-4" />
+                                                <RefreshCw className="h-4 w-4" />
                                               </Button>
                                             </PopoverTrigger>
                                             <PopoverContent className="w-56">
@@ -769,7 +806,6 @@ export function SyncDashboard() {
                                                       customer.halo_name
                                                     )
                                                   }
-                                                  disabled={isCreatingInvoice}
                                                 >
                                                   {isCreatingInvoice ? (
                                                     <BeatLoader
@@ -787,16 +823,40 @@ export function SyncDashboard() {
                                       </div>
                                       <div className="flex items-center space-x-2 mt-2">
                                         <div className="flex items-center space-x-2">
-                                          <Checkbox
-                                            id={`disabled-${subscription.id}`}
-                                            checked={subscription.disabled}
-                                            onCheckedChange={(checked) =>
-                                              handleUpdateSubscriptionDisabled(
-                                                subscription.id,
-                                                checked as boolean
-                                              )
-                                            }
-                                          />
+                                          <TooltipProvider>
+                                            <Tooltip>
+                                              <TooltipTrigger>
+                                                <Checkbox
+                                                  id={`disabled-${subscription.id}`}
+                                                  checked={
+                                                    subscription.disabled
+                                                  }
+                                                  onCheckedChange={(
+                                                    checked
+                                                  ) => {
+                                                    const newValue =
+                                                      checked as boolean;
+                                                    handleUpdateSubscriptionDisabled(
+                                                      subscription.id,
+                                                      newValue,
+                                                      {
+                                                        ...subscription,
+                                                        disabled: newValue,
+                                                      }
+                                                    );
+                                                  }}
+                                                />
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>
+                                                  {subscription.disabled
+                                                    ? "Enable"
+                                                    : "Disable"}{" "}
+                                                  this subscription
+                                                </p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
                                           <label
                                             htmlFor={`disabled-${subscription.id}`}
                                             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
@@ -807,47 +867,88 @@ export function SyncDashboard() {
                                               <Lock className="h-4 w-4 inline-block mr-2" />
                                             )}
                                             {subscription.disabled
-                                              ? "Enabled"
+                                              ? "Enable"
                                               : "Disable"}
                                           </label>
                                         </div>
                                         <div className="flex items-center space-x-1">
                                           <Hash className="h-4 w-4" />
-                                          <Input
-                                            type="number"
-                                            className="w-32 h-8"
-                                            value={
-                                              overrideCounts[subscription.id] ??
-                                              subscription.override_count ??
-                                              ""
-                                            }
-                                            min="0"
-                                            onChange={(e) => {
-                                              const value = Math.max(
-                                                0,
-                                                parseInt(e.target.value) || 0
-                                              );
-                                              setOverrideCounts((prev) => ({
-                                                ...prev,
-                                                [subscription.id]: value,
-                                              }));
-                                            }}
-                                          />
+                                          <TooltipProvider>
+                                            <Tooltip>
+                                              <TooltipTrigger>
+                                                <Input
+                                                  type="number"
+                                                  className="w-32 h-8"
+                                                  value={
+                                                    overrideCounts[
+                                                      subscription.id
+                                                    ] ??
+                                                    subscription.override_count ??
+                                                    ""
+                                                  }
+                                                  min="0"
+                                                  onChange={(e) => {
+                                                    const value = Math.max(
+                                                      0,
+                                                      parseInt(
+                                                        e.target.value
+                                                      ) || 0
+                                                    );
+                                                    setOverrideCounts(
+                                                      (prev) => ({
+                                                        ...prev,
+                                                        [subscription.id]:
+                                                          value,
+                                                      })
+                                                    );
+                                                  }}
+                                                />
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>
+                                                  Set override count for this
+                                                  subscription
+                                                </p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
                                         </div>
                                         <div className="flex items-center space-x-2">
-                                          <Checkbox
-                                            id={`override-${subscription.id}`}
-                                            checked={subscription.override}
-                                            onCheckedChange={(checked) =>
-                                              handleUpdateSubscriptionOverride(
-                                                subscription.id,
-                                                checked as boolean,
-                                                overrideCounts[
-                                                  subscription.id
-                                                ] ?? subscription.override_count
-                                              )
-                                            }
-                                          />
+                                          <TooltipProvider>
+                                            <Tooltip>
+                                              <TooltipTrigger>
+                                                <Checkbox
+                                                  id={`override-${subscription.id}`}
+                                                  checked={
+                                                    subscription.override
+                                                  }
+                                                  onCheckedChange={(
+                                                    checked
+                                                  ) => {
+                                                    const newValue =
+                                                      checked as boolean;
+                                                    handleUpdateSubscriptionOverride(
+                                                      subscription.id,
+                                                      newValue,
+                                                      overrideCounts[
+                                                        subscription.id
+                                                      ] ??
+                                                        subscription.override_count,
+                                                      {
+                                                        ...subscription,
+                                                        override: newValue,
+                                                      }
+                                                    );
+                                                  }}
+                                                />
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>
+                                                  Override this subscription
+                                                </p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
                                         </div>
                                       </div>
                                     </TableCell>
@@ -913,15 +1014,20 @@ export function SyncDashboard() {
             </TableHeader>
             <TableBody>
               {agreements.map((agreement, index) => (
-                <TableRow key={agreement.id}>
+                <TableRow
+                  key={agreement.id}
+                  className={agreement === selectedAgreement ? "bg-muted" : ""}
+                >
                   <TableCell>{agreement.ref}</TableCell>
                   <TableCell>{agreement.client_name}</TableCell>
                   <TableCell>
                     <Button
-                      variant="outline"
+                      variant={
+                        agreement === selectedAgreement ? "default" : "outline"
+                      }
                       onClick={() => setSelectedAgreement(agreement)}
                     >
-                      Select
+                      {agreement === selectedAgreement ? "Selected" : "Select"}
                     </Button>
                   </TableCell>
                 </TableRow>

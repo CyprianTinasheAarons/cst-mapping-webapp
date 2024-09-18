@@ -31,14 +31,16 @@ export const updateIngramHaloCustomerSync = createAsyncThunk(
     customerId,
     haloId,
     haloName,
+    synced,
   }: {
     customerId: number;
     haloId: string;
     haloName: string;
+    synced: boolean;
   }) => {
     const response = await MiddlewareService.updateIngramHaloCustomerSync(
       customerId,
-      true,
+      synced,
       {
         customer_halo_id: haloId,
         halo_name: haloName,
@@ -48,8 +50,18 @@ export const updateIngramHaloCustomerSync = createAsyncThunk(
   }
 );
 
+interface IngramHaloCustomer {
+  id: number;
+  customer_halo_id: string;
+  halo_name: string;
+  customer_ingram_id: string;
+  ingram_name: string;
+  synced_at: string;
+  synced: boolean;
+}
+
 interface IngramState {
-  clients: any[];
+  clients: IngramHaloCustomer[];
   subscriptions: any[];
   status: "idle" | "loading" | "succeeded" | "failed";
   error: string | null;

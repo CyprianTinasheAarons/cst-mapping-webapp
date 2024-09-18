@@ -92,10 +92,11 @@ export const getIngramClients = () => {
  */
 export const updateIngramHaloCustomerSync = (
   customerId: number,
-  synced = true,
+  synced: boolean,
   haloDetails?: Record<string, any>
 ) =>
   httpCommon.put(`/supabase/update-ingram-halo-customer-sync/${customerId}`, {
+    synced: synced,
     customer_halo_id: haloDetails?.customer_halo_id,
     halo_name: haloDetails?.halo_name,
   });
@@ -125,7 +126,6 @@ export const getAllIngramHaloItems = () => {
   return httpCommon.get(`/supabase/ingram-halo-items`);
 };
 
-
 /**
  * Updates the Ingram Halo item mapping
  * @param {Object} data - The data to update
@@ -133,7 +133,6 @@ export const getAllIngramHaloItems = () => {
  */
 export const updateIngramHaloItem = (data: Record<string, any>) =>
   httpCommon.put(`/supabase/update-ingram-halo-item`, data);
-
 
 // ---- Bitdefender API ----
 

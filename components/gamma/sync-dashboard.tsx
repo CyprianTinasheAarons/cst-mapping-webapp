@@ -13,7 +13,13 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, MoreHorizontal, AlertCircle } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Search, AlertCircle, RefreshCw } from "lucide-react";
 import {
   Pagination,
   PaginationContent,
@@ -54,7 +60,7 @@ import {
 import { BeatLoader } from "react-spinners";
 import { ComboboxDemo } from "@/components/ui/combobox";
 import { Checkbox } from "@/components/ui/checkbox";
-import {  Lock, Hash, Unlock } from "lucide-react";
+import { Lock, Hash, Unlock } from "lucide-react";
 
 export function SyncDashboard() {
   const [customerSearch, setCustomerSearch] = React.useState("");
@@ -64,7 +70,9 @@ export function SyncDashboard() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncedCustomer, setSyncedCustomer] = useState<string | null>(null);
   const [selectedAgreement, setSelectedAgreement] = useState<any | null>(null);
-  const [overrideCounts, setOverrideCounts] = useState<Record<string, number>>({});
+  const [overrideCounts, setOverrideCounts] = useState<Record<string, number>>(
+    {}
+  );
 
   const dispatch = useAppDispatch();
 
@@ -255,13 +263,15 @@ export function SyncDashboard() {
 
   const handleUpdateSubscriptionDisabled = async (
     subscriptionId: string,
-    value: boolean
+    value: boolean,
+    subscription: any
   ) => {
     try {
       await dispatch(
         updateGammaHaloItem({
           id: parseInt(subscriptionId),
           disabled: value,
+          ...subscription, // Include all other subscription details
         })
       ).unwrap();
 
@@ -281,7 +291,8 @@ export function SyncDashboard() {
   const handleUpdateSubscriptionOverride = async (
     subscriptionId: string,
     override: boolean,
-    overrideCount: number | null
+    overrideCount: number | null,
+    subscription: any
   ) => {
     try {
       await dispatch(
@@ -289,13 +300,14 @@ export function SyncDashboard() {
           id: parseInt(subscriptionId),
           override,
           override_count: overrideCount,
+          ...subscription, // Include all other subscription details
         })
       ).unwrap();
 
       // Update local state
-      setOverrideCounts(prev => ({
+      setOverrideCounts((prev) => ({
         ...prev,
-        [subscriptionId]: overrideCount ?? 0
+        [subscriptionId]: overrideCount ?? 0,
       }));
 
       // Fetch updated Gamma state
@@ -420,6 +432,7 @@ export function SyncDashboard() {
   const safeGammaSubscriptions = Array.isArray(gammaSubscriptions)
     ? gammaSubscriptions
     : [];
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <main className="container mx-auto px-4 py-8">
@@ -510,7 +523,7 @@ export function SyncDashboard() {
                             <Popover>
                               <PopoverTrigger asChild>
                                 <Button variant="ghost" size="sm">
-                                  <MoreHorizontal className="h-4 w-4" />
+                                  <RefreshCw className="h-4 w-4 mr-2" />
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent className="w-40">
@@ -557,10 +570,13 @@ export function SyncDashboard() {
                   <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center space-x-2">
                       <Input
-                        placeholder="Search companies"
+                        placeholder="Search customers"
                         className="max-w-2xl"
-                        value={subscriptionSearch}
-                        onChange={(e) => setSubscriptionSearch(e.target.value)}
+                        value={customerSearch}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value);
+                          setCurrentPage(1); // Reset to first page on new search
+                        }}
                       />
                       <Button variant="outline" size="icon">
                         <Search className="h-4 w-4" />
@@ -719,7 +735,7 @@ export function SyncDashboard() {
                                                 variant="outline"
                                                 size="icon"
                                               >
-                                                <MoreHorizontal className="h-4 w-4" />
+                                                <RefreshCw className="h-4 w-4" />
                                               </Button>
                                             </PopoverTrigger>
                                             <PopoverContent className="w-56">
@@ -789,7 +805,16 @@ export function SyncDashboard() {
                                                       customer.halo_name ?? ""
                                                     )
                                                   }
-                                                  disabled={isCreatingInvoice}
+                                                  //@ts-ignore
+                                                  disabled={
+                                                    !subscription.item_synced ||
+                                                    selectedHaloItems[
+                                                      subscription.id
+                                                    ] ||
+                                                    syncingSubscriptions[
+                                                      subscription.id
+                                                    ]
+                                                  }
                                                 >
                                                   {isCreatingInvoice ? (
                                                     <BeatLoader
@@ -807,16 +832,40 @@ export function SyncDashboard() {
                                       </div>
                                       <div className="flex items-center space-x-2 mt-2">
                                         <div className="flex items-center space-x-2">
-                                          <Checkbox
-                                            id={`disabled-${subscription.id}`}
-                                            checked={subscription.disabled}
-                                            onCheckedChange={(checked) =>
-                                              handleUpdateSubscriptionDisabled(
-                                                subscription.id,
-                                                checked as boolean
-                                              )
-                                            }
-                                          />
+                                          <TooltipProvider>
+                                            <Tooltip>
+                                              <TooltipTrigger>
+                                                <Checkbox
+                                                  id={`disabled-${subscription.id}`}
+                                                  checked={
+                                                    subscription.disabled
+                                                  }
+                                                  onCheckedChange={(
+                                                    checked
+                                                  ) => {
+                                                    const newValue =
+                                                      checked as boolean;
+                                                    handleUpdateSubscriptionDisabled(
+                                                      subscription.id,
+                                                      newValue,
+                                                      {
+                                                        ...subscription,
+                                                        disabled: newValue,
+                                                      }
+                                                    );
+                                                  }}
+                                                />
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>
+                                                  {subscription.disabled
+                                                    ? "Enable"
+                                                    : "Disable"}{" "}
+                                                  this subscription
+                                                </p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
                                           <label
                                             htmlFor={`disabled-${subscription.id}`}
                                             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
@@ -827,38 +876,88 @@ export function SyncDashboard() {
                                               <Lock className="h-4 w-4 inline-block mr-2" />
                                             )}
                                             {subscription.disabled
-                                              ? "Enabled"
+                                              ? "Enable"
                                               : "Disable"}
                                           </label>
                                         </div>
                                         <div className="flex items-center space-x-1">
                                           <Hash className="h-4 w-4" />
-                                          <Input
-                                            type="number"
-                                            className="w-32 h-8"
-                                            value={overrideCounts[subscription.id] ?? subscription.override_count ?? ''}
-                                            min="0"
-                                            onChange={(e) => {
-                                              const value = Math.max(0, parseInt(e.target.value) || 0);
-                                              setOverrideCounts(prev => ({
-                                                ...prev,
-                                                [subscription.id]: value
-                                              }));
-                                            }}
-                                          />
+                                          <TooltipProvider>
+                                            <Tooltip>
+                                              <TooltipTrigger>
+                                                <Input
+                                                  type="number"
+                                                  className="w-32 h-8"
+                                                  value={
+                                                    overrideCounts[
+                                                      subscription.id
+                                                    ] ??
+                                                    subscription.override_count ??
+                                                    ""
+                                                  }
+                                                  min="0"
+                                                  onChange={(e) => {
+                                                    const value = Math.max(
+                                                      0,
+                                                      parseInt(
+                                                        e.target.value
+                                                      ) || 0
+                                                    );
+                                                    setOverrideCounts(
+                                                      (prev) => ({
+                                                        ...prev,
+                                                        [subscription.id]:
+                                                          value,
+                                                      })
+                                                    );
+                                                  }}
+                                                />
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>
+                                                  Set override count for this
+                                                  subscription
+                                                </p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
                                         </div>
                                         <div className="flex items-center space-x-2">
-                                          <Checkbox
-                                            id={`override-${subscription.id}`}
-                                            checked={subscription.override}
-                                            onCheckedChange={(checked) =>
-                                              handleUpdateSubscriptionOverride(
-                                                subscription.id,
-                                                checked as boolean,
-                                                overrideCounts[subscription.id] ?? subscription.override_count
-                                              )
-                                            }
-                                          />
+                                          <TooltipProvider>
+                                            <Tooltip>
+                                              <TooltipTrigger>
+                                                <Checkbox
+                                                  id={`override-${subscription.id}`}
+                                                  checked={
+                                                    subscription.override
+                                                  }
+                                                  onCheckedChange={(
+                                                    checked
+                                                  ) => {
+                                                    const newValue =
+                                                      checked as boolean;
+                                                    handleUpdateSubscriptionOverride(
+                                                      subscription.id,
+                                                      newValue,
+                                                      overrideCounts[
+                                                        subscription.id
+                                                      ] ??
+                                                        subscription.override_count,
+                                                      {
+                                                        ...subscription,
+                                                        override: newValue,
+                                                      }
+                                                    );
+                                                  }}
+                                                />
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>
+                                                  Override this subscription
+                                                </p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
                                         </div>
                                       </div>
                                     </TableCell>

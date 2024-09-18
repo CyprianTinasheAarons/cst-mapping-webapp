@@ -35,10 +35,10 @@ export default function RootLayout({
                 className="hover:opacity-80 transition-opacity duration-200"
               />
             </Link>
-            <div className="flex items-center space-x-4">
+            <div className="flex-grow flex justify-center">
               <NavLinks />
-              <AuthButton />
             </div>
+            <AuthButton />
           </div>
         </nav>
         <main className="flex-grow mt-16 bg-white">
