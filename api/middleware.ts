@@ -125,6 +125,16 @@ export const getAllIngramHaloItems = () => {
   return httpCommon.get(`/supabase/ingram-halo-items`);
 };
 
+
+/**
+ * Updates the Ingram Halo item mapping
+ * @param {Object} data - The data to update
+ * @returns {Promise} - Promise resolving to the updated item record
+ */
+export const updateIngramHaloItem = (data: Record<string, any>) =>
+  httpCommon.put(`/supabase/update-ingram-halo-item`, data);
+
+
 // ---- Bitdefender API ----
 
 /**
@@ -233,14 +243,6 @@ export const setDuoOverrideStatus = (data: any) => {
 };
 
 // ---- Middleware Service Object ----
-
-/**
- * Updates the Ingram Halo item mapping
- * @param {Object} data - The data to update
- * @returns {Promise} - Promise resolving to the updated item record
- */
-export const updateIngramHaloItem = (data: Record<string, any>) =>
-  httpCommon.put(`/supabase/update-ingram-halo-item`, data);
 
 const MiddlewareService = {
   getHaloClients,

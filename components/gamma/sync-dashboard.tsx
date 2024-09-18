@@ -24,17 +24,17 @@ import {
 } from "@/components/ui/pagination";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import {
-  fetchIngramClients,
-  fetchIngramHaloItems,
-  updateIngramHaloCustomerSync,
-} from "../../slices/ingram/ingramSlice";
+  fetchGammaCustomers,
+  updateGammaHaloCustomerSync,
+  updateGammaHaloItem,
+  fetchGammaHaloItems,
+} from "../../slices/gamma/gammaSlice";
 import {
   fetchHaloClients,
   fetchHaloItems,
-  updateIngramHaloItem,
   fetchHaloContracts,
   createHaloRecurringInvoice,
-  fetchIngramHaloItem,
+  fetchGammaHaloItem,
 } from "../../slices/halo/haloSlice";
 import {
   Popover,
@@ -62,12 +62,15 @@ export function SyncDashboard() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncedCustomer, setSyncedCustomer] = useState<string | null>(null);
   const [selectedAgreement, setSelectedAgreement] = useState<any | null>(null);
+
   const dispatch = useAppDispatch();
+
   const {
-    clients: ingramClients,
-    subscriptions: ingramSubscriptions,
-    status: ingramStatus,
-  } = useAppSelector((state) => state.ingram);
+    customers: gammaCustomers,
+    status: gammaStatus,
+    subscriptions: gammaSubscriptions,
+  } = useAppSelector((state) => state.gamma);
+
   const {
     clients: haloClients,
     items: haloItems,
@@ -76,11 +79,11 @@ export function SyncDashboard() {
   } = useAppSelector((state) => state.halo);
 
   useEffect(() => {
-    if (ingramStatus === "idle") {
-      dispatch(fetchIngramClients());
-      dispatch(fetchIngramHaloItems());
+    if (gammaStatus === "idle") {
+      dispatch(fetchGammaCustomers());
+      dispatch(fetchGammaHaloItems());
     }
-  }, [ingramStatus]);
+  }, [gammaStatus]);
 
   useEffect(() => {
     if (haloStatus === "idle") {
@@ -88,13 +91,13 @@ export function SyncDashboard() {
       dispatch(fetchHaloItems());
     }
   }, [haloStatus]);
-  const filteredCustomers = ingramClients.filter(
+
+  const filteredCustomers = gammaCustomers.filter(
     (customer) =>
-      (customer.ingram_name?.toLowerCase() ?? '').includes(customerSearch.toLowerCase()) ||
-      (customer.customer_ingram_id ?? '').includes(customerSearch) ||
-      (customer.subscriptions || []).some((sub: any) =>
-        (sub.item_ingram_name?.toLowerCase() ?? '').includes(customerSearch.toLowerCase())
-      )
+      customer.gamma_name
+        .toLowerCase()
+        .includes(customerSearch.toLowerCase()) ||
+      customer.customer_gamma_id.includes(customerSearch)
   );
 
   const totalFilteredCustomers = filteredCustomers.length;
@@ -110,40 +113,53 @@ export function SyncDashboard() {
   >({});
 
   const handleHaloCustomerSelect = (
-    ingramCustomerId: string,
+    gammaCustomerId: string,
     haloCustomerId: string,
     haloCustomerName: string
   ) => {
     setSelectedHaloCustomers((prev) => ({
       ...prev,
-      [ingramCustomerId]: { id: haloCustomerId, name: haloCustomerName },
+      [gammaCustomerId]: { id: haloCustomerId, name: haloCustomerName },
     }));
   };
 
   const handleSyncChanges = async (customerId: number) => {
+    console.log(`Starting sync for customer ID: ${customerId}`);
+    console.log("Selected Halo customer:", selectedHaloCustomers);
     const selectedHalo = selectedHaloCustomers[customerId];
+    console.log("Selected Halo customer:", selectedHalo);
     if (selectedHalo && !isSyncing) {
       setIsSyncing(true);
+      console.log("Syncing started");
       try {
-        await dispatch(
-          updateIngramHaloCustomerSync({
+        console.log("Dispatching updateGammaHaloCustomerSync");
+        const result = await dispatch(
+          updateGammaHaloCustomerSync({
             customerId,
-            haloId: selectedHalo.id,
+            haloId: parseInt(selectedHalo.id),
             haloName: selectedHalo.name,
           })
         ).unwrap();
+        console.log("updateGammaHaloCustomerSync result:", result);
         setSyncedCustomer(selectedHalo.name);
 
-        // Fetch updated Halo state
+        console.log("Fetching updated Halo state");
         await dispatch(fetchHaloClients({}));
         await dispatch(fetchHaloItems());
+        console.log("Halo state updated");
 
         toast.success(`Successfully synced with ${selectedHalo.name}`);
       } catch (error) {
+        console.error("Sync failed:", error);
         toast.error("Sync failed. Please try again.");
       } finally {
         setIsSyncing(false);
+        console.log("Syncing finished");
       }
+    } else {
+      console.log(
+        "Sync not started: No selected Halo customer or already syncing"
+      );
     }
   };
 
@@ -175,7 +191,7 @@ export function SyncDashboard() {
       setSyncingSubscriptions((prev) => ({ ...prev, [subscriptionId]: true }));
       try {
         await dispatch(
-          updateIngramHaloItem({
+          updateGammaHaloItem({
             id: parseInt(subscriptionId),
             item_halo_id: selectedHaloItem.id.toString(),
             item_halo_name: selectedHaloItem.name,
@@ -211,7 +227,7 @@ export function SyncDashboard() {
       setSyncingSubscriptions((prev) => ({ ...prev, [subscriptionId]: true }));
       try {
         await dispatch(
-          updateIngramHaloItem({
+          updateGammaHaloItem({
             id: parseInt(subscriptionId),
             item_synced: false,
           })
@@ -265,7 +281,8 @@ export function SyncDashboard() {
     const fetchSelectedItem = async () => {
       if (selectedId) {
         try {
-          await dispatch(fetchIngramHaloItem(parseInt(selectedId))).unwrap();
+          console.log("Fetching item", selectedId);
+          await dispatch(fetchGammaHaloItem(parseInt(selectedId))).unwrap();
           console.log("Current item", currentItem);
         } catch (error) {
           console.error("Error fetching selected item:", error);
@@ -339,6 +356,9 @@ export function SyncDashboard() {
     );
   }, [haloItems]);
 
+  const safeGammaSubscriptions = Array.isArray(gammaSubscriptions)
+    ? gammaSubscriptions
+    : [];
   return (
     <div className="min-h-screen bg-background text-foreground">
       <main className="container mx-auto px-4 py-8">
@@ -372,18 +392,18 @@ export function SyncDashboard() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Ingram Customer</TableHead>
+                        <TableHead>Gamma Customer</TableHead>
                         <TableHead>HaloPSA Customer</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedCustomers.map((customer) => (
-                        <TableRow key={customer.customer_ingram_id}>
+                        <TableRow key={customer.customer_gamma_id}>
                           <TableCell className="font-medium">
-                            {customer.ingram_name}
+                            {customer.gamma_name}
                             <div className="text-sm text-muted-foreground">
-                              {customer.customer_ingram_id}
+                              {customer.customer_gamma_id}
                             </div>
                           </TableCell>
                           <TableCell className="font-medium">
@@ -412,7 +432,7 @@ export function SyncDashboard() {
                                       "Handling Halo customer select"
                                     );
                                     handleHaloCustomerSelect(
-                                      customer.id,
+                                      customer.id.toString(),
                                       selectedHalo.id,
                                       selectedHalo.name
                                     );
@@ -437,12 +457,17 @@ export function SyncDashboard() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() =>
-                                      handleSyncChanges(customer.id)
-                                    }
+                                    onClick={() => {
+                                      console.log(
+                                        "Customer IDs:",
+                                        paginatedCustomers
+                                      );
+                                      handleSyncChanges(customer.id);
+                                    }}
                                     disabled={
-                                      !selectedHaloCustomers[customer.id] ||
-                                      isSyncing
+                                      !selectedHaloCustomers[
+                                        customer.customer_gamma_id
+                                      ] || isSyncing
                                     }
                                   >
                                     {isSyncing ? (
@@ -488,7 +513,7 @@ export function SyncDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {ingramStatus === "loading" ? (
+                      {gammaStatus === "loading" ? (
                         <TableRow>
                           <TableCell colSpan={4} className="text-center py-8">
                             <p className="mt-4 text-sm text-muted-foreground">
@@ -506,7 +531,7 @@ export function SyncDashboard() {
                         </TableRow>
                       ) : (
                         paginatedCustomers.map((customer) => (
-                          <React.Fragment key={customer.customer_ingram_id}>
+                          <React.Fragment key={customer.customer_gamma_id}>
                             <TableRow>
                               <TableCell
                                 className="font-medium bg-muted"
@@ -515,17 +540,17 @@ export function SyncDashboard() {
                                 <div className="flex justify-between items-center w-full">
                                   <div>
                                     <span className="text-lg">
-                                      {customer.ingram_name}
+                                      {customer.gamma_name}
                                     </span>
                                     <span className="ml-2 text-sm text-muted-foreground">
-                                      ({customer.customer_ingram_id})
+                                      ({customer.customer_gamma_id})
                                     </span>
                                   </div>
                                   <Badge variant="outline">
-                                    {ingramSubscriptions.filter(
+                                    {safeGammaSubscriptions?.filter(
                                       (sub) =>
-                                        sub.customer_ingram_id ===
-                                        customer.customer_ingram_id
+                                        sub.customer_gamma_id ===
+                                        customer.customer_gamma_id
                                     ).length || 0}{" "}
                                     Subscriptions
                                   </Badge>
@@ -547,30 +572,33 @@ export function SyncDashboard() {
                               </TableCell>
                             </TableRow>
 
-                            {ingramSubscriptions.filter(
+                            {safeGammaSubscriptions?.filter(
                               (sub) =>
-                                sub.customer_ingram_id ===
-                                customer.customer_ingram_id
+                                sub.customer_gamma_id ===
+                                customer.customer_gamma_id
                             ).length > 0 ? (
-                              ingramSubscriptions
-                                .filter(
+                              safeGammaSubscriptions
+                                ?.filter(
                                   (sub) =>
-                                    sub.customer_ingram_id ===
-                                    customer.customer_ingram_id
+                                    sub.customer_gamma_id ===
+                                    customer.customer_gamma_id
                                 )
                                 .map((subscription) => (
                                   <TableRow
-                                    key={`${customer.customer_ingram_id}-${subscription.id}`}
+                                    key={`${customer.customer_gamma_id}-${subscription.id}`}
                                     className="hover:bg-muted/50 transition-colors"
                                   >
                                     <TableCell>
                                       <div className="flex justify-between items-center">
                                         <div>
                                           <div className="font-medium">
-                                            {subscription.item_ingram_name}
+                                            {subscription.item_gamma_name}
                                           </div>
                                           <div className="text-sm text-muted-foreground">
-                                            ID: {subscription.item_ingram_id}
+                                            ID: {subscription.item_gamma_id}
+                                          </div>
+                                          <div className="text-sm text-muted-foreground">
+                                            Count: {subscription.count}
                                           </div>
                                         </div>
                                         <div className="flex items-center space-x-2">
@@ -640,7 +668,7 @@ export function SyncDashboard() {
                                                   onClick={() =>
                                                     handleSyncSubscription(
                                                       subscription.id,
-                                                      subscription.item_ingram_name
+                                                      subscription.item_gamma_name
                                                     )
                                                   }
                                                   disabled={
@@ -670,7 +698,7 @@ export function SyncDashboard() {
                                                   onClick={() => {
                                                     handleUnsyncSubscription(
                                                       subscription.id,
-                                                      subscription.item_ingram_name
+                                                      subscription.item_gamma_name
                                                     );
                                                   }}
                                                   disabled={
@@ -696,7 +724,7 @@ export function SyncDashboard() {
                                                   onClick={() =>
                                                     handleAddRecurringInvoice(
                                                       subscription.id,
-                                                      customer.halo_name
+                                                      customer.halo_name ?? ""
                                                     )
                                                   }
                                                   disabled={isCreatingInvoice}
@@ -778,15 +806,15 @@ export function SyncDashboard() {
             </TableHeader>
             <TableBody>
               {agreements.map((agreement, index) => (
-                <TableRow key={agreement.id}>
+                <TableRow key={agreement.id} className={agreement === selectedAgreement ? "bg-muted" : ""}>
                   <TableCell>{agreement.ref}</TableCell>
                   <TableCell>{agreement.client_name}</TableCell>
                   <TableCell>
                     <Button
-                      variant="outline"
+                      variant={agreement === selectedAgreement ? "default" : "outline"}
                       onClick={() => setSelectedAgreement(agreement)}
                     >
-                      Select
+                      {agreement === selectedAgreement ? "Selected" : "Select"}
                     </Button>
                   </TableCell>
                 </TableRow>

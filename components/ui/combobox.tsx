@@ -87,6 +87,7 @@ export function ComboboxDemo({
                     setOpen(false);
                     onSelect(currentValue);
                   }}
+                  className="text-xs"
                 >
                   <Check
                     className={cn(

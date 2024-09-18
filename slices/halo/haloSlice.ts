@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import MiddlewareService from "../../api/middleware";
+import GammaService from "../../api/Gamma.Service";
 
 export const fetchHaloClients = createAsyncThunk(
   "halo/fetchClients",
@@ -59,6 +60,14 @@ export const fetchIngramHaloItem = createAsyncThunk(
   "halo/fetchIngramHaloItem",
   async (itemId: number) => {
     const response = await MiddlewareService.getIngramHaloItem(itemId);
+    return response.data;
+  }
+);
+
+export const fetchGammaHaloItem = createAsyncThunk(
+  "gamma/fetchHaloItem",
+  async (id: number) => {
+    const response = await GammaService.getGammaHaloItem(id);
     return response.data;
   }
 );
@@ -155,6 +164,17 @@ const haloSlice = createSlice({
         state.currentItem = action.payload;
       })
       .addCase(fetchIngramHaloItem.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+      .addCase(fetchGammaHaloItem.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(fetchGammaHaloItem.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.currentItem = action.payload;
+      })
+      .addCase(fetchGammaHaloItem.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message || null;
       });

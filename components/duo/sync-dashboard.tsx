@@ -37,6 +37,13 @@ import {
   fetchIngramHaloItem,
 } from "../../slices/halo/haloSlice";
 import {
+  fetchDuoClients,
+  fetchDuoSubscriptions,
+  updateDuoHaloCustomerSync,
+  updateDuoHaloItem,
+  fetchDuoHaloItem,
+} from "../../slices/duo/duoSlice";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -50,6 +57,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { BeatLoader } from "react-spinners";
 import { ComboboxDemo } from "@/components/ui/combobox";
@@ -88,12 +96,17 @@ export function SyncDashboard() {
       dispatch(fetchHaloItems());
     }
   }, [haloStatus]);
+
   const filteredCustomers = ingramClients.filter(
     (customer) =>
-      (customer.ingram_name?.toLowerCase() ?? '').includes(customerSearch.toLowerCase()) ||
-      (customer.customer_ingram_id ?? '').includes(customerSearch) ||
+      customer.ingram_name
+        .toLowerCase()
+        .includes(customerSearch.toLowerCase()) ||
+      customer.customer_ingram_id.includes(customerSearch) ||
       (customer.subscriptions || []).some((sub: any) =>
-        (sub.item_ingram_name?.toLowerCase() ?? '').includes(customerSearch.toLowerCase())
+        sub.item_ingram_name
+          .toLowerCase()
+          .includes(customerSearch.toLowerCase())
       )
   );
 

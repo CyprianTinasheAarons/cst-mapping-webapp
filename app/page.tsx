@@ -53,7 +53,7 @@ export default function Login({
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#0C797D] w-screen relative">
+    <div className=" flex items-center justify-center h-screen bg-[#0C797D] w-screen relative">
       <div className="absolute inset-0 bg-cover bg-center z-0" style={{ backgroundImage: "url('/bg.webp')" }}></div>
       <div className="relative z-10 w-full max-w-md mx-auto">
         <div className="bg-white/90 rounded-lg shadow-xl p-8">

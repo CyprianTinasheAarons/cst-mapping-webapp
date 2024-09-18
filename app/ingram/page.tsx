@@ -1,9 +1,5 @@
 import React from "react";
 import { SyncDashboard } from "../../components/Ingram/sync-dashboard";
-import Image from "next/image";
-import Link from "next/link";
-import AuthButton from "@/components/AuthButton";
-
 export default function IngramPage() {
   return (
     <div className="flex-1 w-full flex flex-col items-center">

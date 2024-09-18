@@ -1,10 +1,11 @@
-import { configureStore } from '@reduxjs/toolkit';
-import haloReducer from '../features/halo/haloSlice';
-import ingramReducer from '../features/ingram/ingramSlice';
-import bitdefenderReducer from '../features/bitdefender/bitdefenderSlice';
-import sentinelOneReducer from '../features/sentinelOne/sentinelOneSlice';
-import supabaseReducer from '../features/supabase/supabaseSlice';
-import duoReducer from '../features/duo/duoSlice';
+import { configureStore } from "@reduxjs/toolkit";
+import haloReducer from "../slices/halo/haloSlice";
+import ingramReducer from "../slices/ingram/ingramSlice";
+import bitdefenderReducer from "../slices/bitdefender/bitdefenderSlice";
+import sentinelOneReducer from "../slices/sentinelOne/sentinelOneSlice";
+import supabaseReducer from "../slices/supabase/supabaseSlice";
+import duoReducer from "../slices/duo/duoSlice";
+import gammaReducer from "../slices/gamma/gammaSlice";
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
     sentinelOne: sentinelOneReducer,
     supabase: supabaseReducer,
     duo: duoReducer,
+    gamma: gammaReducer,
   },
 });
 
