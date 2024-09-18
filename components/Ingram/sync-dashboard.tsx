@@ -53,9 +53,8 @@ import {
 } from "@/components/ui/dialog";
 import { BeatLoader } from "react-spinners";
 import { ComboboxDemo } from "@/components/ui/combobox";
-import { Toggle } from "@/components/ui/toggle";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Pencil, Lock, Hash } from "lucide-react";
+import { Pencil, Lock, Hash, Unlock } from "lucide-react";
 
 export function SyncDashboard() {
   const [customerSearch, setCustomerSearch] = React.useState("");
@@ -65,7 +64,12 @@ export function SyncDashboard() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncedCustomer, setSyncedCustomer] = useState<string | null>(null);
   const [selectedAgreement, setSelectedAgreement] = useState<any | null>(null);
+  const [overrideCounts, setOverrideCounts] = useState<Record<string, number>>(
+    {}
+  );
+
   const dispatch = useAppDispatch();
+
   const {
     clients: ingramClients,
     subscriptions: ingramSubscriptions,
@@ -93,10 +97,14 @@ export function SyncDashboard() {
   }, [haloStatus]);
   const filteredCustomers = ingramClients.filter(
     (customer) =>
-      (customer.ingram_name?.toLowerCase() ?? '').includes(customerSearch.toLowerCase()) ||
-      (customer.customer_ingram_id ?? '').includes(customerSearch) ||
+      (customer.ingram_name?.toLowerCase() ?? "").includes(
+        customerSearch.toLowerCase()
+      ) ||
+      (customer.customer_ingram_id ?? "").includes(customerSearch) ||
       (customer.subscriptions || []).some((sub: any) =>
-        (sub.item_ingram_name?.toLowerCase() ?? '').includes(customerSearch.toLowerCase())
+        (sub.item_ingram_name?.toLowerCase() ?? "").includes(
+          customerSearch.toLowerCase()
+        )
       )
   );
 
@@ -236,6 +244,65 @@ export function SyncDashboard() {
       }
     }
   };
+
+    const handleUpdateSubscriptionDisabled = async (
+      subscriptionId: string,
+      value: boolean
+    ) => {
+      try {
+        await dispatch(
+          updateIngramHaloItem({
+            id: parseInt(subscriptionId),
+            disabled: value,
+          })
+        ).unwrap();
+
+        // Fetch updated Gamma state
+        await dispatch(fetchIngramClients());
+        await dispatch(fetchIngramHaloItems());
+
+        toast.success(
+          `Successfully updated disabled status for subscription ${subscriptionId}`
+        );
+      } catch (error) {
+        console.error("Error updating disabled status:", error);
+        toast.error("Failed to update disabled status. Please try again.");
+      }
+    };
+
+    const handleUpdateSubscriptionOverride = async (
+      subscriptionId: string,
+      override: boolean,
+      overrideCount: number | null
+    ) => {
+      try {
+        await dispatch(
+          updateIngramHaloItem({
+            id: parseInt(subscriptionId),
+            override,
+            override_count: overrideCount,
+          })
+        ).unwrap();
+
+        // Update local state
+        setOverrideCounts((prev) => ({
+          ...prev,
+          [subscriptionId]: overrideCount ?? 0,
+        }));
+
+        // Fetch updated Gamma state
+        await dispatch(fetchIngramClients());
+        await dispatch(fetchIngramHaloItems());
+
+        toast.success(
+          `Successfully updated override for subscription ${subscriptionId}`
+        );
+      } catch (error) {
+        console.error("Error updating override:", error);
+        toast.error("Failed to update override. Please try again.");
+      }
+    };
+
 
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
 
@@ -724,46 +791,62 @@ export function SyncDashboard() {
                                             id={`disabled-${subscription.id}`}
                                             checked={subscription.disabled}
                                             onCheckedChange={(checked) =>
-                                              console.log("Disabled:", checked)
+                                              handleUpdateSubscriptionDisabled(
+                                                subscription.id,
+                                                checked as boolean
+                                              )
                                             }
                                           />
                                           <label
                                             htmlFor={`disabled-${subscription.id}`}
                                             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                                           >
-                                            <Lock className="h-4 w-4 inline-block mr-2" />
-                                            Disabled
-                                          </label>
-                                        </div>
-                                        <div className="flex items-center space-x-2">
-                                          <Checkbox
-                                            id={`override-${subscription.id}`}
-                                            checked={subscription.override}
-                                            onCheckedChange={(checked) =>
-                                              console.log("Override:", checked)
-                                            }
-                                          />
-                                          <label
-                                            htmlFor={`override-${subscription.id}`}
-                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                          >
-                                            <Pencil className="h-4 w-4 inline-block mr-2" />
-                                            Override
+                                            {subscription.disabled ? (
+                                              <Unlock className="h-4 w-4 inline-block mr-2" />
+                                            ) : (
+                                              <Lock className="h-4 w-4 inline-block mr-2" />
+                                            )}
+                                            {subscription.disabled
+                                              ? "Enabled"
+                                              : "Disable"}
                                           </label>
                                         </div>
                                         <div className="flex items-center space-x-1">
                                           <Hash className="h-4 w-4" />
                                           <Input
                                             type="number"
-                                            className="w-16 h-8"
-                                            defaultValue={
-                                              subscription.override_count
+                                            className="w-32 h-8"
+                                            value={
+                                              overrideCounts[subscription.id] ??
+                                              subscription.override_count ??
+                                              ""
                                             }
                                             min="0"
                                             onChange={(e) => {
-                                              const value = Math.max(0, parseInt(e.target.value));
-                                              console.log("Override count:", value);
+                                              const value = Math.max(
+                                                0,
+                                                parseInt(e.target.value) || 0
+                                              );
+                                              setOverrideCounts((prev) => ({
+                                                ...prev,
+                                                [subscription.id]: value,
+                                              }));
                                             }}
+                                          />
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                          <Checkbox
+                                            id={`override-${subscription.id}`}
+                                            checked={subscription.override}
+                                            onCheckedChange={(checked) =>
+                                              handleUpdateSubscriptionOverride(
+                                                subscription.id,
+                                                checked as boolean,
+                                                overrideCounts[
+                                                  subscription.id
+                                                ] ?? subscription.override_count
+                                              )
+                                            }
                                           />
                                         </div>
                                       </div>
