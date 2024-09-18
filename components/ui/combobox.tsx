@@ -50,10 +50,14 @@ export function ComboboxDemo({
   }
 
   const handleInputChange = (input: string) => {
-    const filtered = options.filter((option) =>
-      option.label.toLowerCase().includes(input.toLowerCase())
-    );
-    setFilteredOptions(filtered);
+    if (input === "") {
+      setFilteredOptions(options);
+    } else {
+      const filtered = options.filter((option) =>
+        option.label.toLowerCase().includes(input.toLowerCase())
+      );
+      setFilteredOptions(filtered);
+    }
   };
 
   return (

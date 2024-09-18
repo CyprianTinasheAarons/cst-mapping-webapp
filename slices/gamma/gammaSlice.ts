@@ -30,6 +30,7 @@ export const updateGammaHaloCustomerSync = createAsyncThunk(
       {
         customer_halo_id: haloId,
         halo_name: haloName,
+        synced: synced,
       }
     );
     return response.data;

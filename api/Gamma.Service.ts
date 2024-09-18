@@ -23,11 +23,14 @@ export const updateGammaHaloCustomerSync = (
   synced: boolean,
   haloDetails?: Record<string, any>
 ) =>
-  httpCommon.put(`/supabase/update-gamma-halo-customer-sync/${customerId}`, {
-    customer_halo_id: haloDetails?.customer_halo_id,
-    halo_name: haloDetails?.halo_name,
-    synced: synced,
-  });
+  httpCommon.put(
+    `/supabase/update-gamma-halo-customer-sync/${customerId}`,
+    {
+      customer_halo_id: haloDetails?.customer_halo_id,
+      halo_name: haloDetails?.halo_name,
+      synced: synced,
+    }
+  );
 
 /**
  * Fetches Gamma subscriptions data
@@ -55,7 +58,6 @@ export const updateGammaHaloItem = (data: Record<string, any>) => {
 export const getGammaHaloItem = (id: number) => {
   return httpCommon.get(`/supabase/gamma-halo-item/${id}`);
 };
-
 
 const Service = {
   getGammaCustomers,
