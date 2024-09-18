@@ -4,6 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import AuthButton from "@/components/AuthButton";
 import NavLinks from "@/components/NavLinks";
+import { Montserrat } from 'next/font/google';
+
+const montserrat = Montserrat({ subsets: ['latin'] });
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -22,7 +25,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="flex flex-col min-h-screen">
+      <body className={`flex flex-col ${montserrat.className}`}>
         <nav className="w-full bg-[#0C797D] shadow-2xl border-b border-gray-200 fixed top-0 left-0 right-0 z-10 transition-all duration-300 ease-in-out hover:shadow-3xl">
           <div className="container mx-auto px-6 py-3 flex justify-between items-center">
             <Link href="/home">

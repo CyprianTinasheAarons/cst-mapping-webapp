@@ -53,6 +53,9 @@ import {
 } from "@/components/ui/dialog";
 import { BeatLoader } from "react-spinners";
 import { ComboboxDemo } from "@/components/ui/combobox";
+import { Toggle } from "@/components/ui/toggle";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Pencil, Lock, Hash } from "lucide-react";
 
 export function SyncDashboard() {
   const [customerSearch, setCustomerSearch] = React.useState("");
@@ -713,6 +716,55 @@ export function SyncDashboard() {
                                               </div>
                                             </PopoverContent>
                                           </Popover>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center space-x-2 mt-2">
+                                        <div className="flex items-center space-x-2">
+                                          <Checkbox
+                                            id={`disabled-${subscription.id}`}
+                                            checked={subscription.disabled}
+                                            onCheckedChange={(checked) =>
+                                              console.log("Disabled:", checked)
+                                            }
+                                          />
+                                          <label
+                                            htmlFor={`disabled-${subscription.id}`}
+                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                          >
+                                            <Lock className="h-4 w-4 inline-block mr-2" />
+                                            Disabled
+                                          </label>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                          <Checkbox
+                                            id={`override-${subscription.id}`}
+                                            checked={subscription.override}
+                                            onCheckedChange={(checked) =>
+                                              console.log("Override:", checked)
+                                            }
+                                          />
+                                          <label
+                                            htmlFor={`override-${subscription.id}`}
+                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                          >
+                                            <Pencil className="h-4 w-4 inline-block mr-2" />
+                                            Override
+                                          </label>
+                                        </div>
+                                        <div className="flex items-center space-x-1">
+                                          <Hash className="h-4 w-4" />
+                                          <Input
+                                            type="number"
+                                            className="w-16 h-8"
+                                            defaultValue={
+                                              subscription.override_count
+                                            }
+                                            min="0"
+                                            onChange={(e) => {
+                                              const value = Math.max(0, parseInt(e.target.value));
+                                              console.log("Override count:", value);
+                                            }}
+                                          />
                                         </div>
                                       </div>
                                     </TableCell>

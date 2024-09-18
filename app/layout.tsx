@@ -1,5 +1,8 @@
 import "./globals.css";
 import { ClientRoot } from "./ClientRoot";
+import { Montserrat } from 'next/font/google';
+
+const montserrat = Montserrat({ subsets: ['latin'] });
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -18,7 +21,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="flex flex-col">
+      <body className={`flex flex-col ${montserrat.className}`}>
         <ClientRoot>{children}</ClientRoot>
       </body>
     </html>
