@@ -104,22 +104,27 @@ export function SyncDashboard() {
     }
   }, [haloStatus]);
 
-  const filteredCustomers = ingramClients.filter(
-    (customer) =>
-      (customer.ingram_name?.toLowerCase() ?? "").includes(
-        customerSearch.toLowerCase()
-      ) || (customer.customer_ingram_id ?? "").includes(customerSearch)
-  );
+  const filteredCustomers = ingramClients
+    .filter(
+      (customer) =>
+        (customer.ingram_name?.toLowerCase() ?? "").includes(
+          customerSearch.toLowerCase()
+        ) || (customer.customer_ingram_id ?? "").includes(customerSearch)
+    )
+    .sort((a, b) => (a.ingram_name ?? "").localeCompare(b.ingram_name ?? ""));
 
-  const filteredSubscriptions = ingramSubscriptions.filter(
-    (subscription) =>
-      (subscription.item_ingram_name?.toLowerCase() ?? "").includes(
-        subscriptionSearch.toLowerCase()
-      ) || (subscription.item_ingram_id ?? "").includes(subscriptionSearch)
-  );
+  const filteredSubscriptions = ingramSubscriptions
+    .filter(
+      (subscription) =>
+        (subscription.item_ingram_name?.toLowerCase() ?? "").includes(
+          subscriptionSearch.toLowerCase()
+        ) || (subscription.item_ingram_id ?? "").includes(subscriptionSearch)
+    )
+    .sort((a, b) =>
+      (a.item_ingram_name ?? "").localeCompare(b.item_ingram_name ?? "")
+    );
 
   const totalFilteredCustomers = filteredCustomers.length;
-  const totalPages = Math.ceil(totalFilteredCustomers / itemsPerPage);
 
   const paginatedCustomers = filteredCustomers.slice(
     (currentPage - 1) * itemsPerPage,

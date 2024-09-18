@@ -64,7 +64,6 @@ import { Lock, Hash, Unlock } from "lucide-react";
 
 export function SyncDashboard() {
   const [customerSearch, setCustomerSearch] = React.useState("");
-  const [subscriptionSearch, setSubscriptionSearch] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
   const itemsPerPage = 10;
   const [isSyncing, setIsSyncing] = useState(false);
@@ -102,17 +101,17 @@ export function SyncDashboard() {
       dispatch(fetchHaloItems());
     }
   }, [haloStatus]);
-
-  const filteredCustomers = gammaCustomers.filter(
-    (customer) =>
-      customer.gamma_name
-        .toLowerCase()
-        .includes(customerSearch.toLowerCase()) ||
-      customer.customer_gamma_id.includes(customerSearch)
-  );
+  const filteredCustomers = gammaCustomers
+    .filter(
+      (customer) =>
+        customer.gamma_name
+          .toLowerCase()
+          .includes(customerSearch.toLowerCase()) ||
+        customer.customer_gamma_id.includes(customerSearch)
+    )
+    .sort((a, b) => a.gamma_name.localeCompare(b.gamma_name));
 
   const totalFilteredCustomers = filteredCustomers.length;
-  const totalPages = Math.ceil(totalFilteredCustomers / itemsPerPage);
 
   const paginatedCustomers = filteredCustomers.slice(
     (currentPage - 1) * itemsPerPage,
