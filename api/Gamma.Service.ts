@@ -20,15 +20,14 @@ export const getGammaCustomers = () => {
  */
 export const updateGammaHaloCustomerSync = (
   customerId: number,
-  synced: boolean,
+  synced = true,
   haloDetails?: Record<string, any>
 ) =>
   httpCommon.put(
-    `/supabase/update-gamma-halo-customer-sync/${customerId}`,
+    `/supabase/update-gamma-halo-customer-sync/${customerId}?synced=${synced}`,
     {
       customer_halo_id: haloDetails?.customer_halo_id,
       halo_name: haloDetails?.halo_name,
-      synced: synced,
     }
   );
 

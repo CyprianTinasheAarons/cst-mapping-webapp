@@ -95,11 +95,13 @@ export const updateIngramHaloCustomerSync = (
   synced: boolean,
   haloDetails?: Record<string, any>
 ) =>
-  httpCommon.put(`/supabase/update-ingram-halo-customer-sync/${customerId}`, {
-    synced: synced,
-    customer_halo_id: haloDetails?.customer_halo_id,
-    halo_name: haloDetails?.halo_name,
-  });
+  httpCommon.put(
+    `/supabase/update-ingram-halo-customer-sync/${customerId}?synced=${synced}`,
+    {
+      customer_halo_id: haloDetails?.customer_halo_id,
+      halo_name: haloDetails?.halo_name,
+    }
+  );
 
 /**
  * Fetches Ingram subscriptions for a specific customer
