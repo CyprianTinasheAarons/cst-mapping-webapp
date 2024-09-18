@@ -17,14 +17,16 @@ export const updateGammaHaloCustomerSync = createAsyncThunk(
     customerId,
     haloId,
     haloName,
+    synced,
   }: {
     customerId: number;
     haloId: number | null;
     haloName: string | null;
+    synced: boolean;
   }) => {
     const response = await GammaService.updateGammaHaloCustomerSync(
       customerId,
-      true,
+      synced,
       {
         customer_halo_id: haloId,
         halo_name: haloName,

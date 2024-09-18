@@ -19,7 +19,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Search, AlertCircle, RefreshCw } from "lucide-react";
+import { Search, AlertCircle, RefreshCw, X } from "lucide-react";
 import {
   Pagination,
   PaginationContent,
@@ -135,42 +135,57 @@ export function SyncDashboard() {
   };
 
   const handleSyncChanges = async (customerId: number) => {
-    console.log(`Starting sync for customer ID: ${customerId}`);
-    console.log("Selected Halo customer:", selectedHaloCustomers);
     const selectedHalo = selectedHaloCustomers[customerId];
-    console.log("Selected Halo customer:", selectedHalo);
     if (selectedHalo && !isSyncing) {
       setIsSyncing(true);
-      console.log("Syncing started");
       try {
-        console.log("Dispatching updateGammaHaloCustomerSync");
-        const result = await dispatch(
+        await dispatch(
           updateGammaHaloCustomerSync({
             customerId,
             haloId: parseInt(selectedHalo.id),
             haloName: selectedHalo.name,
+            synced: true,
           })
         ).unwrap();
-        console.log("updateGammaHaloCustomerSync result:", result);
         setSyncedCustomer(selectedHalo.name);
 
-        console.log("Fetching updated Halo state");
+        // Fetch updated Halo state
         await dispatch(fetchHaloClients({}));
         await dispatch(fetchHaloItems());
-        console.log("Halo state updated");
 
         toast.success(`Successfully synced with ${selectedHalo.name}`);
       } catch (error) {
-        console.error("Sync failed:", error);
         toast.error("Sync failed. Please try again.");
       } finally {
         setIsSyncing(false);
-        console.log("Syncing finished");
       }
-    } else {
-      console.log(
-        "Sync not started: No selected Halo customer or already syncing"
-      );
+    }
+  };
+
+  const handleUnsyncChanges = async (customerId: number) => {
+    if (!isSyncing) {
+      setIsSyncing(true);
+      try {
+        await dispatch(
+          updateGammaHaloCustomerSync({
+            customerId,
+            haloId: null,
+            haloName: null,
+            synced: false,
+          })
+        ).unwrap();
+        setSyncedCustomer(null);
+
+        // Fetch updated Halo state
+        await dispatch(fetchHaloClients({}));
+        await dispatch(fetchHaloItems());
+
+        toast.success("Successfully unsynced customer");
+      } catch (error) {
+        toast.error("Unsync failed. Please try again.");
+      } finally {
+        setIsSyncing(false);
+      }
     }
   };
 
@@ -520,39 +535,40 @@ export function SyncDashboard() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button variant="ghost" size="sm">
-                                  <RefreshCw className="h-4 w-4 mr-2" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-40">
-                                <div className="flex flex-col space-y-2">
+                            <Button variant="ghost" size="sm">
+                              <div className="flex items-center space-x-4">
+                                {customer.synced ? (
                                   <Button
-                                    variant="ghost"
+                                    variant="outline"
                                     size="sm"
-                                    onClick={() => {
-                                      console.log(
-                                        "Customer IDs:",
-                                        paginatedCustomers
-                                      );
-                                      handleSyncChanges(customer.id);
-                                    }}
+                                    className="bg-red-200 text-black hover:bg-red-100"
+                                    onClick={() =>
+                                      handleUnsyncChanges(customer.id)
+                                    }
+                                    disabled={isSyncing}
+                                  >
+                                    <X className="h-4 w-4 mr-2" />
+                                    Unsync
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="bg-blue-200 text-black hover:bg-blue-100"
+                                    onClick={() =>
+                                      handleSyncChanges(customer.id)
+                                    }
                                     disabled={
-                                      !selectedHaloCustomers[
-                                        customer.customer_gamma_id
-                                      ] || isSyncing
+                                      !selectedHaloCustomers[customer.id] ||
+                                      isSyncing
                                     }
                                   >
-                                    {isSyncing ? (
-                                      <BeatLoader color="#0C797D" size={8} />
-                                    ) : (
-                                      "Sync Changes"
-                                    )}
+                                    <RefreshCw className="h-4 w-4 mr-2" />
+                                    Sync
                                   </Button>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
+                                )}
+                              </div>
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
