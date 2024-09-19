@@ -97,10 +97,11 @@ export function SyncDashboard() {
 
   useEffect(() => {
     if (haloStatus === "idle") {
-      dispatch(fetchHaloClients({}));
-      dispatch(fetchHaloItems());
+      dispatch(fetchHaloClients({})).unwrap();
+      dispatch(fetchHaloItems()).unwrap();
     }
   }, [haloStatus]);
+
   const filteredCustomers = gammaCustomers
     .filter(
       (customer) =>
@@ -506,19 +507,11 @@ export function SyncDashboard() {
                               <ComboboxDemo
                                 options={haloCustomerOptions}
                                 onSelect={(value) => {
-                                  console.log("Selected value:", value);
                                   const selectedHalo = haloClients.find(
-                                    (hc) => hc.name === value
+                                    (hc) => hc.name == value
                                   );
-                                  console.log("Halo Clients:", haloClients);
-                                  console.log(
-                                    "Selected Halo customer:",
-                                    selectedHalo
-                                  );
+
                                   if (selectedHalo) {
-                                    console.log(
-                                      "Handling Halo customer select"
-                                    );
                                     handleHaloCustomerSelect(
                                       customer.id.toString(),
                                       selectedHalo.id,

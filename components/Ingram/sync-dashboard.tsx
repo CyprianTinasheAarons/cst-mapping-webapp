@@ -99,8 +99,8 @@ export function SyncDashboard() {
 
   useEffect(() => {
     if (haloStatus === "idle") {
-      dispatch(fetchHaloClients({}));
-      dispatch(fetchHaloItems());
+      dispatch(fetchHaloClients({})).unwrap();
+      dispatch(fetchHaloItems()).unwrap();
     }
   }, [haloStatus]);
 
@@ -517,7 +517,7 @@ export function SyncDashboard() {
                                 onSelect={(value) => {
                                   console.log("Selected value:", value);
                                   const selectedHalo = haloClients.find(
-                                    (hc) => hc.name === value
+                                    (hc) => hc.name == value
                                   );
                                   console.log("Halo Clients:", haloClients);
                                   console.log(
