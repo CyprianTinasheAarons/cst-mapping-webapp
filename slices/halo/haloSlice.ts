@@ -1,24 +1,28 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import MiddlewareService from "../../api/middleware";
-import GammaService from "../../api/Gamma.Service";
+import HaloService from "@/api/Halo.Service";
+import GammaService from "@/api/Gamma.Service";
+import IngramService from "@/api/Ingram.Service";
+import BitdefenderService from "@/api/Bitdefender.Service";
+import DuoService from "@/api/Duo.Service";
+import SentineloneService from "@/api/Sentinelone.Service";
 
 export const fetchHaloClients = createAsyncThunk(
   "halo/fetchClients",
-  async (data: any) => {
-    const response = await MiddlewareService.getHaloClients(data);
+  async () => {
+    const response = await HaloService.getHaloClients();
     return response.data;
   }
 );
 
 export const fetchHaloItems = createAsyncThunk("halo/fetchItems", async () => {
-  const response = await MiddlewareService.getHaloItems();
+  const response = await HaloService.getHaloItems();
   return response.data;
 });
 
 export const fetchHaloContracts = createAsyncThunk(
   "halo/fetchContracts",
   async (search?: string) => {
-    const response = await MiddlewareService.getHaloContracts(search);
+    const response = await HaloService.getHaloContracts(search);
     return response.data;
   }
 );
@@ -26,7 +30,7 @@ export const fetchHaloContracts = createAsyncThunk(
 export const updateIngramHaloItem = createAsyncThunk(
   "halo/updateIngramHaloItem",
   async (data: Record<string, any>) => {
-    const response = await MiddlewareService.updateIngramHaloItem(data);
+    const response = await IngramService.updateIngramHaloItem(data);
     return response.data;
   }
 );
@@ -47,7 +51,7 @@ export const createHaloRecurringInvoice = createAsyncThunk(
       baseprice: number;
     }>;
   }) => {
-    const response = await MiddlewareService.createHaloRecurringInvoice(
+    const response = await IngramService.createHaloRecurringInvoice(
       clientId,
       contractId,
       items
@@ -59,7 +63,7 @@ export const createHaloRecurringInvoice = createAsyncThunk(
 export const fetchIngramHaloItem = createAsyncThunk(
   "halo/fetchIngramHaloItem",
   async (itemId: number) => {
-    const response = await MiddlewareService.getIngramHaloItem(itemId);
+    const response = await IngramService.getIngramHaloItem(itemId);
     return response.data;
   }
 );
@@ -71,6 +75,31 @@ export const fetchGammaHaloItem = createAsyncThunk(
     return response.data;
   }
 );
+
+export const fetchSentineloneHaloItem = createAsyncThunk(
+  "sentinelone/fetchHaloItem",
+  async (id: number) => {
+    const response = await SentineloneService.getSentineloneItemWithCustomer(id);
+    return response.data;
+  }
+);
+
+export const fetchDuoHaloItem = createAsyncThunk(
+  "duo/fetchHaloItem",
+  async (id: number) => {
+    const response = await DuoService.getDuoItemWithCustomer(id);
+    return response.data;
+  }
+);
+
+export const fetchBitdefenderHaloItem = createAsyncThunk(
+  "bitdefender/fetchHaloItem",
+  async (id: number) => {
+    const response = await BitdefenderService.getBitdefenderItemWithCustomer(id);
+    return response.data;
+  }
+);
+
 
 interface HaloState {
   clients: any[];

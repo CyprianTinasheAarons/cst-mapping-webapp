@@ -1,73 +1,46 @@
 import httpCommon from "./http.common";
 
-// ---- Duo API ----
-
-/**
- * Fetches Duo customers data
- * @param {any} data - Query parameters for the request
- * @returns {Promise} - Promise resolving to the Duo customers data
- */
-export const getDuoCustomers = (data: any) => {
-  return httpCommon.get(`/duo`, data);
+export const fetchDuo = () => {
+  return httpCommon.get(`/duo`);
 };
 
-/**
- * Updates the Duo customer sync status
- * @param {number} customerId - The ID of the customer
- * @param {boolean} synced - The sync status
- * @param {Object} duoDetails - Additional details for the Duo customer
- * @returns {Promise} - Promise resolving to the updated customer record
- */
-export const updateDuoCustomerSync = (
-  customerId: number,
-  synced = true,
-  duoDetails?: Record<string, any>
-) =>
-  httpCommon.put(`/supabase/update-duo-customer-sync/${customerId}`, {
-    customer_duo_id: duoDetails?.customer_duo_id,
-    duo_name: duoDetails?.duo_name,
-  });
-
-/**
- * Fetches Duo subscriptions for a specific customer
- * @param {string} customerId - The ID of the customer
- * @returns {Promise} - Promise resolving to the Duo subscriptions data
- */
-export const getDuoSubscriptions = (customerId: string) => {
-  return httpCommon.get(`/duo/subscriptions/${customerId}`);
+export const getDuoCustomers = () => {
+  return httpCommon.get(`/duo/customers`);
 };
 
-/**
- * Fetches all Duo customers data
- * @returns {Promise} - Promise resolving to the Duo customers data
- */
-export const getAllDuoCustomers = () => {
-  return httpCommon.get(`/supabase/duo-customers`);
+export const createDuoCustomers = (data: Record<string, any>) => {
+  return httpCommon.post(`/duo/customers`, data);
 };
 
-/**
- * Fetches all Duo items data
- * @returns {Promise} - Promise resolving to the Duo items data
- */
-export const getAllDuoItems = () => {
-  return httpCommon.get(`/supabase/duo-items`);
+export const updateDuoCustomer = (customerId: number, data: Record<string, any>) => {
+  return httpCommon.put(`/duo/customers/${customerId}`, data);
 };
 
-/**
- * Updates the Duo item mapping
- * @param {Object} data - The data to update
- * @returns {Promise} - Promise resolving to the updated item record
- */
-export const updateDuoItem = (data: Record<string, any>) =>
-  httpCommon.put(`/supabase/update-duo-item`, data);
+export const getDuoItems = () => {
+  return httpCommon.get(`/duo/items`);
+};
 
-const Service = {
+export const createDuoItems = (data: Record<string, any>) => {
+  return httpCommon.post(`/duo/items`, data);
+};
+
+export const updateDuoItem = (itemId: number, data: Record<string, any>) => {
+  return httpCommon.put(`/duo/items/${itemId}`, data);
+};
+
+export const getDuoItemWithCustomer = (itemId: number) => {
+  return httpCommon.get(`/duo/items/${itemId}`);
+};
+
+const duoService = {
+  fetchDuo,
   getDuoCustomers,
-  updateDuoCustomerSync,
-  getDuoSubscriptions,
-  getAllDuoCustomers,
-  getAllDuoItems,
+  createDuoCustomers,
+  updateDuoCustomer,
+  getDuoItems,
+  createDuoItems,
   updateDuoItem,
+  getDuoItemWithCustomer,
 };
 
-export default Service;
+export default duoService;

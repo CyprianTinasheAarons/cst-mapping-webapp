@@ -1,10 +1,10 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import MiddlewareService from "../../api/middleware";
+import IngramService from "@/api/Ingram.Service";
 
 export const fetchIngramClients = createAsyncThunk(
   "ingram/fetchClients",
   async () => {
-    const response = await MiddlewareService.getIngramHaloCustomers();
+    const response = await IngramService.getIngramHaloCustomers();
     return response.data;
   }
 );
@@ -12,7 +12,7 @@ export const fetchIngramClients = createAsyncThunk(
 export const fetchIngramHaloItems = createAsyncThunk(
   "ingram/fetchHaloItems",
   async () => {
-    const response = await MiddlewareService.getAllIngramHaloItems();
+    const response = await IngramService.getAllIngramHaloItems();
     return response.data;
   }
 );
@@ -20,7 +20,7 @@ export const fetchIngramHaloItems = createAsyncThunk(
 export const fetchIngramSubscriptions = createAsyncThunk(
   "ingram/fetchSubscriptions",
   async (customerId: string) => {
-    const response = await MiddlewareService.getIngramSubscriptions(customerId);
+    const response = await IngramService.getIngramSubscriptions(customerId);
     return response.data;
   }
 );
@@ -38,7 +38,7 @@ export const updateIngramHaloCustomerSync = createAsyncThunk(
     haloName: string;
     synced: boolean;
   }) => {
-    const response = await MiddlewareService.updateIngramHaloCustomerSync(
+    const response = await IngramService.updateIngramHaloCustomerSync(
       customerId,
       synced,
       {

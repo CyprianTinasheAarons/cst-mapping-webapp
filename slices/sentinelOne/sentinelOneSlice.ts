@@ -1,44 +1,138 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import MiddlewareService from '../../api/middleware';
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import SentineloneService from "../../api/Sentinelone.Service";
 
-export const fetchSentinelOneCustomers = createAsyncThunk(
-  'sentinelOne/fetchCustomers',
-  async (data: any) => {
-    const response = await MiddlewareService.getSentinelOneCustomers(data);
+export const fetchSentineloneCustomers = createAsyncThunk(
+  "sentinelone/fetchCustomers",
+  async () => {
+    const response = await SentineloneService.getSentineloneCustomers();
     return response.data;
   }
 );
 
-interface SentinelOneState {
-  customers: any[];
-  status: 'idle' | 'loading' | 'succeeded' | 'failed';
+export const updateSentineloneCustomer = createAsyncThunk(
+  "sentinelone/updateCustomer",
+  async ({
+    customerId,
+    data,
+  }: {
+    customerId: number;
+    data: Record<string, any>;
+  }) => {
+    const response = await SentineloneService.updateSentineloneCustomer(
+      customerId,
+      data
+    );
+    return response.data;
+  }
+);
+
+export const fetchSentineloneItems = createAsyncThunk(
+  "sentinelone/fetchItems",
+  async () => {
+    const response = await SentineloneService.getSentineloneItems();
+    return response.data;
+  }
+);
+
+export const updateSentineloneItem = createAsyncThunk(
+  "sentinelone/updateItem",
+  async ({ itemId, data }: { itemId: number; data: Record<string, any> }) => {
+    const response = await SentineloneService.updateSentineloneItem(
+      itemId,
+      data
+    );
+    return response.data;
+  }
+);
+
+interface SentineloneCustomer {
+  id: number;
+  customer_halo_id: string | null;
+  halo_name: string | null;
+  customer_sentinelone_id: string;
+  sentinelone_name: string;
+  synced_at: Date;
+  synced: boolean;
+  disabled: boolean;
+  override: boolean;
+  override_count: number;
+}
+
+interface SentineloneState {
+  customers: SentineloneCustomer[];
+  items: any[];
+  status: "idle" | "loading" | "succeeded" | "failed";
   error: string | null;
 }
 
-const initialState: SentinelOneState = {
+const initialState: SentineloneState = {
   customers: [],
-  status: 'idle',
+  items: [],
+  status: "idle",
   error: null,
 };
 
-const sentinelOneSlice = createSlice({
-  name: 'sentinelOne',
+const sentineloneSlice = createSlice({
+  name: "sentinelone",
   initialState,
   reducers: {},
   extraReducers: (builder) => {
     builder
-      .addCase(fetchSentinelOneCustomers.pending, (state) => {
-        state.status = 'loading';
+      .addCase(fetchSentineloneCustomers.pending, (state) => {
+        state.status = "loading";
       })
-      .addCase(fetchSentinelOneCustomers.fulfilled, (state, action) => {
-        state.status = 'succeeded';
+      .addCase(fetchSentineloneCustomers.fulfilled, (state, action) => {
+        state.status = "succeeded";
         state.customers = action.payload;
       })
-      .addCase(fetchSentinelOneCustomers.rejected, (state, action) => {
-        state.status = 'failed';
+      .addCase(fetchSentineloneCustomers.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+      .addCase(updateSentineloneCustomer.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(updateSentineloneCustomer.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        const index = state.customers.findIndex(
+          (customer) => customer.id === action.payload.id
+        );
+        if (index !== -1) {
+          state.customers[index] = action.payload;
+        }
+      })
+      .addCase(updateSentineloneCustomer.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+      .addCase(fetchSentineloneItems.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(fetchSentineloneItems.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.items = action.payload;
+      })
+      .addCase(fetchSentineloneItems.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+      .addCase(updateSentineloneItem.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(updateSentineloneItem.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        const index = state.items.findIndex(
+          (item) => item.id === action.payload.id
+        );
+        if (index !== -1) {
+          state.items[index] = action.payload;
+        }
+      })
+      .addCase(updateSentineloneItem.rejected, (state, action) => {
+        state.status = "failed";
         state.error = action.error.message || null;
       });
   },
 });
 
-export default sentinelOneSlice.reducer;
+export default sentineloneSlice.reducer;

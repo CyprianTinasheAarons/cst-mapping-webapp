@@ -3,7 +3,6 @@ import haloReducer from "../slices/halo/haloSlice";
 import ingramReducer from "../slices/ingram/ingramSlice";
 import bitdefenderReducer from "../slices/bitdefender/bitdefenderSlice";
 import sentinelOneReducer from "../slices/sentinelOne/sentinelOneSlice";
-import supabaseReducer from "../slices/supabase/supabaseSlice";
 import duoReducer from "../slices/duo/duoSlice";
 import gammaReducer from "../slices/gamma/gammaSlice";
 
@@ -13,7 +12,6 @@ export const store = configureStore({
     ingram: ingramReducer,
     bitdefender: bitdefenderReducer,
     sentinelOne: sentinelOneReducer,
-    supabase: supabaseReducer,
     duo: duoReducer,
     gamma: gammaReducer,
   },

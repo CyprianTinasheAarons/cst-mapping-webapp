@@ -112,7 +112,7 @@ export default function Login({
                 </SubmitButton>
               </div>
 
-              {/* <div>
+              <div>
                 <SubmitButton
                   formAction={signUp}
                   className="group relative w-full flex justify-center py-2 px-4 border border-[#0C797D] text-sm font-medium rounded-md text-[#0C797D] bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0C797D]"
@@ -120,7 +120,7 @@ export default function Login({
                 >
                   Sign Up
                 </SubmitButton>
-              </div> */}
+              </div>
             </form>
             {searchParams?.message && (
               <p className="mt-2 text-center text-sm text-[#0C797D] bg-[#E6F3F3] p-2 rounded ">

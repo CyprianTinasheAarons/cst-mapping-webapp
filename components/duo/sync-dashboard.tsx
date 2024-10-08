@@ -19,7 +19,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Search, AlertCircle, RefreshCw, X } from "lucide-react";
+import {
+  Search,
+  AlertCircle,
+  RefreshCw,
+  X,
+  Lock,
+  Hash,
+  Unlock,
+} from "lucide-react";
 import {
   Pagination,
   PaginationContent,
@@ -30,17 +38,17 @@ import {
 } from "@/components/ui/pagination";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import {
-  fetchGammaCustomers,
-  updateGammaHaloCustomerSync,
-  updateGammaHaloItem,
-  fetchGammaHaloItems,
-} from "../../slices/gamma/gammaSlice";
+  fetchDuoCustomers,
+  updateDuoCustomerSync,
+  updateDuoItem,
+  fetchDuoItems,
+} from "../../slices/duo/duoSlice";
 import {
   fetchHaloClients,
   fetchHaloItems,
   fetchHaloContracts,
   createHaloRecurringInvoice,
-  fetchGammaHaloItem,
+  fetchDuoHaloItem,
 } from "../../slices/halo/haloSlice";
 import {
   Popover,
@@ -60,9 +68,8 @@ import {
 import { BeatLoader } from "react-spinners";
 import { ComboboxDemo } from "@/components/ui/combobox";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Lock, Hash, Unlock } from "lucide-react";
 
-export function GammaSyncDashboard() {
+export function DuoSyncDashboard() {
   const [customerSearch, setCustomerSearch] = React.useState("");
   const [currentPage, setCurrentPage] = React.useState(1);
   const itemsPerPage = 10;
@@ -76,10 +83,10 @@ export function GammaSyncDashboard() {
   const dispatch = useAppDispatch();
 
   const {
-    customers: gammaCustomers,
-    status: gammaStatus,
-    subscriptions: gammaSubscriptions,
-  } = useAppSelector((state) => state.gamma);
+    customers: duoCustomers,
+    status: duoStatus,
+    items: duoItems,
+  } = useAppSelector((state) => state.duo);
 
   const {
     clients: haloClients,
@@ -89,11 +96,11 @@ export function GammaSyncDashboard() {
   } = useAppSelector((state) => state.halo);
 
   useEffect(() => {
-    if (gammaStatus === "idle") {
-      dispatch(fetchGammaCustomers());
-      dispatch(fetchGammaHaloItems());
+    if (duoStatus === "idle") {
+      dispatch(fetchDuoCustomers());
+      dispatch(fetchDuoItems());
     }
-  }, [gammaStatus]);
+  }, [duoStatus]);
 
   useEffect(() => {
     if (haloStatus === "idle") {
@@ -102,15 +109,15 @@ export function GammaSyncDashboard() {
     }
   }, [haloStatus]);
 
-  const filteredCustomers = gammaCustomers
+  const filteredCustomers = duoCustomers
     .filter(
       (customer) =>
-        customer.gamma_name
+        customer.duo_name
           .toLowerCase()
           .includes(customerSearch.toLowerCase()) ||
-        customer.customer_gamma_id.includes(customerSearch)
+        customer.customer_duo_id.includes(customerSearch)
     )
-    .sort((a, b) => a.gamma_name.localeCompare(b.gamma_name));
+    .sort((a, b) => a.duo_name.localeCompare(b.duo_name));
 
   const totalFilteredCustomers = filteredCustomers.length;
 
@@ -124,13 +131,13 @@ export function GammaSyncDashboard() {
   >({});
 
   const handleHaloCustomerSelect = (
-    gammaCustomerId: string,
+    duoCustomerId: string,
     haloCustomerId: string,
     haloCustomerName: string
   ) => {
     setSelectedHaloCustomers((prev) => ({
       ...prev,
-      [gammaCustomerId]: { id: haloCustomerId, name: haloCustomerName },
+      [duoCustomerId]: { id: haloCustomerId, name: haloCustomerName },
     }));
   };
 
@@ -140,7 +147,7 @@ export function GammaSyncDashboard() {
       setIsSyncing(true);
       try {
         await dispatch(
-          updateGammaHaloCustomerSync({
+          updateDuoCustomerSync({
             customerId,
             haloId: parseInt(selectedHalo.id),
             haloName: selectedHalo.name,
@@ -167,7 +174,7 @@ export function GammaSyncDashboard() {
       setIsSyncing(true);
       try {
         await dispatch(
-          updateGammaHaloCustomerSync({
+          updateDuoCustomerSync({
             customerId,
             haloId: null,
             haloName: null,
@@ -217,11 +224,13 @@ export function GammaSyncDashboard() {
       setSyncingSubscriptions((prev) => ({ ...prev, [subscriptionId]: true }));
       try {
         await dispatch(
-          updateGammaHaloItem({
-            id: parseInt(subscriptionId),
-            item_halo_id: selectedHaloItem.id.toString(),
-            item_halo_name: selectedHaloItem.name,
-            item_synced: true,
+          updateDuoItem({
+            itemId: parseInt(subscriptionId),
+            data: {
+              item_halo_id: selectedHaloItem.id.toString(),
+              item_halo_name: selectedHaloItem.name,
+              item_synced: true,
+            },
           })
         ).unwrap();
 
@@ -253,9 +262,11 @@ export function GammaSyncDashboard() {
       setSyncingSubscriptions((prev) => ({ ...prev, [subscriptionId]: true }));
       try {
         await dispatch(
-          updateGammaHaloItem({
-            id: parseInt(subscriptionId),
-            item_synced: false,
+          updateDuoItem({
+            itemId: parseInt(subscriptionId),
+            data: {
+              item_synced: false,
+            },
           })
         ).unwrap();
         console.log("Unsynced subscription", subscriptionId, subscriptionName);
@@ -283,16 +294,18 @@ export function GammaSyncDashboard() {
   ) => {
     try {
       await dispatch(
-        updateGammaHaloItem({
-          id: parseInt(subscriptionId),
-          disabled: value,
+        updateDuoItem({
+          itemId: parseInt(subscriptionId),
+          data: {
+            disabled: value,
+          },
           ...subscription, // Include all other subscription details
         })
       ).unwrap();
 
-      // Fetch updated Gamma state
-      await dispatch(fetchGammaCustomers());
-      await dispatch(fetchGammaHaloItems());
+      // Fetch updated Duo state
+      await dispatch(fetchDuoCustomers());
+      await dispatch(fetchDuoItems());
 
       toast.success(
         `Successfully updated disabled status for subscription ${subscriptionId}`
@@ -311,10 +324,12 @@ export function GammaSyncDashboard() {
   ) => {
     try {
       await dispatch(
-        updateGammaHaloItem({
-          id: parseInt(subscriptionId),
-          override,
-          override_count: overrideCount,
+        updateDuoItem({
+          itemId: parseInt(subscriptionId),
+          data: {
+            override,
+            override_count: overrideCount,
+          },
           ...subscription, // Include all other subscription details
         })
       ).unwrap();
@@ -325,9 +340,9 @@ export function GammaSyncDashboard() {
         [subscriptionId]: overrideCount ?? 0,
       }));
 
-      // Fetch updated Gamma state
-      await dispatch(fetchGammaCustomers());
-      await dispatch(fetchGammaHaloItems());
+      // Fetch updated Duo state
+      await dispatch(fetchDuoCustomers());
+      await dispatch(fetchDuoItems());
 
       toast.success(
         `Successfully updated override for subscription ${subscriptionId}`
@@ -370,7 +385,7 @@ export function GammaSyncDashboard() {
       if (selectedId) {
         try {
           console.log("Fetching item", selectedId);
-          await dispatch(fetchGammaHaloItem(parseInt(selectedId))).unwrap();
+          await dispatch(fetchDuoHaloItem(parseInt(selectedId))).unwrap();
           console.log("Current item", currentItem);
         } catch (error) {
           console.error("Error fetching selected item:", error);
@@ -444,9 +459,7 @@ export function GammaSyncDashboard() {
     );
   }, [haloItems]);
 
-  const safeGammaSubscriptions = Array.isArray(gammaSubscriptions)
-    ? gammaSubscriptions
-    : [];
+  const safeDuoItems = Array.isArray(duoItems) ? duoItems : [];
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -481,18 +494,18 @@ export function GammaSyncDashboard() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Gamma Customer</TableHead>
+                        <TableHead>Duo Customer</TableHead>
                         <TableHead>HaloPSA Customer</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedCustomers.map((customer) => (
-                        <TableRow key={customer.customer_gamma_id}>
+                        <TableRow key={customer.customer_duo_id}>
                           <TableCell className="font-medium">
-                            {customer.gamma_name}
+                            {customer.duo_name}
                             <div className="text-sm text-muted-foreground">
-                              {customer.customer_gamma_id}
+                              {customer.customer_duo_id}
                             </div>
                           </TableCell>
                           <TableCell className="font-medium">
@@ -598,7 +611,7 @@ export function GammaSyncDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {gammaStatus === "loading" ? (
+                      {duoStatus === "loading" ? (
                         <TableRow>
                           <TableCell colSpan={4} className="text-center py-8">
                             <p className="mt-4 text-sm text-muted-foreground">
@@ -616,7 +629,7 @@ export function GammaSyncDashboard() {
                         </TableRow>
                       ) : (
                         paginatedCustomers.map((customer) => (
-                          <React.Fragment key={customer.customer_gamma_id}>
+                          <React.Fragment key={customer.customer_duo_id}>
                             <TableRow>
                               <TableCell
                                 className="font-medium bg-muted"
@@ -625,17 +638,17 @@ export function GammaSyncDashboard() {
                                 <div className="flex justify-between items-center w-full">
                                   <div>
                                     <span className="text-lg">
-                                      {customer.gamma_name}
+                                      {customer.duo_name}
                                     </span>
                                     <span className="ml-2 text-sm text-muted-foreground">
-                                      ({customer.customer_gamma_id})
+                                      ({customer.customer_duo_id})
                                     </span>
                                   </div>
                                   <Badge variant="outline">
-                                    {safeGammaSubscriptions?.filter(
-                                      (sub) =>
-                                        sub.customer_gamma_id ===
-                                        customer.customer_gamma_id
+                                    {safeDuoItems?.filter(
+                                      (item) =>
+                                        item.customer_duo_id ===
+                                        customer.customer_duo_id
                                     ).length || 0}{" "}
                                     Subscriptions
                                   </Badge>
@@ -657,30 +670,30 @@ export function GammaSyncDashboard() {
                               </TableCell>
                             </TableRow>
 
-                            {safeGammaSubscriptions?.filter(
-                              (sub) =>
-                                sub.customer_gamma_id ===
-                                customer.customer_gamma_id
+                            {safeDuoItems?.filter(
+                              (item) =>
+                                item.customer_duo_id ===
+                                customer.customer_duo_id
                             ).length > 0 ? (
-                              safeGammaSubscriptions
+                              safeDuoItems
                                 ?.filter(
-                                  (sub) =>
-                                    sub.customer_gamma_id ===
-                                    customer.customer_gamma_id
+                                  (item) =>
+                                    item.customer_duo_id ===
+                                    customer.customer_duo_id
                                 )
                                 .map((subscription) => (
                                   <TableRow
-                                    key={`${customer.customer_gamma_id}-${subscription.id}`}
+                                    key={`${customer.customer_duo_id}-${subscription.id}`}
                                     className="hover:bg-muted/50 transition-colors"
                                   >
                                     <TableCell>
                                       <div className="flex justify-between items-center">
                                         <div>
                                           <div className="font-medium">
-                                            {subscription.item_gamma_name}
+                                            {subscription.item_duo_name}
                                           </div>
                                           <div className="text-sm text-muted-foreground">
-                                            ID: {subscription.item_gamma_id}
+                                            ID: {subscription.item_duo_id}
                                           </div>
                                           <div className="text-sm text-muted-foreground">
                                             Count: {subscription.count}
@@ -754,7 +767,7 @@ export function GammaSyncDashboard() {
                                                   onClick={() =>
                                                     handleSyncSubscription(
                                                       subscription.id,
-                                                      subscription.item_gamma_name
+                                                      subscription.item_duo_name
                                                     )
                                                   }
                                                   disabled={
@@ -784,7 +797,7 @@ export function GammaSyncDashboard() {
                                                   onClick={() => {
                                                     handleUnsyncSubscription(
                                                       subscription.id,
-                                                      subscription.item_gamma_name
+                                                      subscription.item_duo_name
                                                     );
                                                   }}
                                                   disabled={
