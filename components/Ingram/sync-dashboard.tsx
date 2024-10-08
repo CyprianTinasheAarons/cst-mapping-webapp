@@ -99,7 +99,7 @@ export function SyncDashboard() {
 
   useEffect(() => {
     if (haloStatus === "idle") {
-      dispatch(fetchHaloClients({})).unwrap();
+      dispatch(fetchHaloClients()).unwrap();
       dispatch(fetchHaloItems()).unwrap();
     }
   }, [haloStatus]);
@@ -162,7 +162,7 @@ export function SyncDashboard() {
         setSyncedCustomer(selectedHalo.name);
 
         // Fetch updated Halo state
-        await dispatch(fetchHaloClients({}));
+        await dispatch(fetchHaloClients());
         await dispatch(fetchHaloItems());
 
         toast.success(`Successfully synced with ${selectedHalo.name}`);
@@ -189,7 +189,7 @@ export function SyncDashboard() {
         setSyncedCustomer(null);
 
         // Fetch updated Halo state
-        await dispatch(fetchHaloClients({}));
+        await dispatch(fetchHaloClients());
         await dispatch(fetchHaloItems());
 
         toast.success("Successfully unsynced customer");
@@ -238,7 +238,7 @@ export function SyncDashboard() {
         ).unwrap();
 
         // Fetch updated Halo state
-        await dispatch(fetchHaloClients({}));
+        await dispatch(fetchHaloClients());
         await dispatch(fetchHaloItems());
 
         toast.success(
@@ -273,7 +273,7 @@ export function SyncDashboard() {
         console.log("Unsynced subscription", subscriptionId, subscriptionName);
 
         // Fetch updated Halo state
-        await dispatch(fetchHaloClients({}));
+        await dispatch(fetchHaloClients());
         await dispatch(fetchHaloItems());
 
         toast.success(`Successfully unsynced ${subscriptionName}`);
