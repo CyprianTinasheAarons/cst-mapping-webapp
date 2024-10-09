@@ -13,6 +13,10 @@ export const getHaloItems = (
   });
 };
 
+export const getHaloItemById = (itemId: number) => {
+  return httpCommon.get(`/halo/items/${itemId}`);
+};
+
 export const getHaloContracts = (
   search?: string,
   count: number = 50,
@@ -64,6 +68,7 @@ const HaloService = {
   getHaloRecurringInvoices,
   createHaloRecurringInvoiceTemplate,
   createHaloRecurringInvoice,
+  getHaloItemById,
 };
 
 export default HaloService;

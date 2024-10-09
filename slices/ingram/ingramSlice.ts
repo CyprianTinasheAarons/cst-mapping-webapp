@@ -13,7 +13,12 @@ export const fetchIngramHaloItems = createAsyncThunk(
   "ingram/fetchHaloItems",
   async () => {
     const response = await IngramService.getAllIngramHaloItems();
-    return response.data;
+    const filteredItems = response.data.filter((item: any) => {
+      const name = item.item_ingram_name?.toLowerCase() || '';
+      return name.includes('adobe') || name.includes('fly') || 
+             name.includes('dropbox') || name.includes('azure');
+    });
+    return filteredItems;
   }
 );
 
@@ -21,7 +26,12 @@ export const fetchIngramSubscriptions = createAsyncThunk(
   "ingram/fetchSubscriptions",
   async (customerId: string) => {
     const response = await IngramService.getIngramSubscriptions(customerId);
-    return response.data;
+    const filteredSubscriptions = response.data.filter((subscription: any) => {
+      const name = subscription.item_ingram_name?.toLowerCase() || '';
+      return name.includes('adobe') || name.includes('fly') || 
+             name.includes('dropbox') || name.includes('azure');
+    });
+    return filteredSubscriptions;
   }
 );
 

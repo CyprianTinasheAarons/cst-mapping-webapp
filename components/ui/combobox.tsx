@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
-
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,24 +38,44 @@ export function ComboboxDemo({
 }: ComboboxDemoProps) {
   const [open, setOpen] = React.useState(false);
   const [value, setValue] = React.useState(selectedValue || "");
-  const [filteredOptions, setFilteredOptions] = React.useState(options);
+  const [filteredOptions, setFilteredOptions] = React.useState<ComboboxOption[]>([]);
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [displayedOptions, setDisplayedOptions] = React.useState<ComboboxOption[]>([]);
+  const [page, setPage] = React.useState(1);
+  const itemsPerPage = 30;
 
   React.useEffect(() => {
     setValue(selectedValue || "");
   }, [selectedValue]);
+
+  React.useEffect(() => {
+    if (searchTerm === "") {
+      setFilteredOptions(options);
+    } else {
+      const filtered = options.filter((option) =>
+        option.label.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredOptions(filtered);
+    }
+    setPage(1);
+  }, [options, searchTerm]);
+
+  React.useEffect(() => {
+    setDisplayedOptions(filteredOptions.slice(0, page * itemsPerPage));
+  }, [filteredOptions, page]);
 
   if (!options || options.length === 0) {
     return <div>Loading options...</div>;
   }
 
   const handleInputChange = (input: string) => {
-    if (input === "") {
-      setFilteredOptions(options);
-    } else {
-      const filtered = options.filter((option) =>
-        option.label.toLowerCase().includes(input.toLowerCase())
-      );
-      setFilteredOptions(filtered);
+    setSearchTerm(input);
+  };
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const bottom = e.currentTarget.scrollHeight - e.currentTarget.scrollTop === e.currentTarget.clientHeight;
+    if (bottom && displayedOptions.length < filteredOptions.length) {
+      setPage((prevPage) => prevPage + 1);
     }
   };
 
@@ -82,10 +101,10 @@ export function ComboboxDemo({
             onValueChange={handleInputChange}
             className="w-full"
           />
-          <CommandList>
+          <CommandList className="max-h-[300px] overflow-y-auto" onScroll={handleScroll}>
             <CommandEmpty>No {placeholder.toLowerCase()} found.</CommandEmpty>
             <CommandGroup>
-              {filteredOptions.map((option) => (
+              {displayedOptions.map((option) => (
                 <CommandItem
                   key={option.value}
                   value={option.value}

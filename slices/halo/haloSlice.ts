@@ -19,11 +19,45 @@ export const fetchHaloItems = createAsyncThunk("halo/fetchItems", async () => {
   return response.data;
 });
 
+export const fetchHaloItemById = createAsyncThunk(
+  "halo/fetchItemById",
+  async (itemId: number) => {
+    const response = await HaloService.getHaloItemById(itemId);
+    return response.data;
+  }
+);
+
+export const fetchHaloItemsForIngram = createAsyncThunk(
+  "halo/fetchItemsForIngram",
+  async () => {
+    const searches = [
+      "Microsoft CSP - Annual",
+      "Microsoft CSP - Monthly - 12 Month",
+      "Microsoft CSP - Monthly Rolling",
+    ];
+
+    const responses = await Promise.all(
+      searches.map((search) => HaloService.getHaloItems(300, search))
+    );
+
+    const mergedData = responses.flatMap((response) => response.data.items);
+    return mergedData;
+  }
+);
+
 export const fetchHaloContracts = createAsyncThunk(
   "halo/fetchContracts",
   async (search?: string) => {
     const response = await HaloService.getHaloContracts(search);
     return response.data;
+  }
+);
+
+export const fetchHaloRecurringInvoices = createAsyncThunk(
+  "halo/fetchRecurringInvoices",
+  async (contractId: number) => {
+    const response = await HaloService.getHaloRecurringInvoices(contractId);
+    return response.data.invoices;
   }
 );
 
@@ -79,7 +113,9 @@ export const fetchGammaHaloItem = createAsyncThunk(
 export const fetchSentineloneHaloItem = createAsyncThunk(
   "sentinelone/fetchHaloItem",
   async (id: number) => {
-    const response = await SentineloneService.getSentineloneItemWithCustomer(id);
+    const response = await SentineloneService.getSentineloneItemWithCustomer(
+      id
+    );
     return response.data;
   }
 );
@@ -95,17 +131,20 @@ export const fetchDuoHaloItem = createAsyncThunk(
 export const fetchBitdefenderHaloItem = createAsyncThunk(
   "bitdefender/fetchHaloItem",
   async (id: number) => {
-    const response = await BitdefenderService.getBitdefenderItemWithCustomer(id);
+    const response = await BitdefenderService.getBitdefenderItemWithCustomer(
+      id
+    );
     return response.data;
   }
 );
-
 
 interface HaloState {
   clients: any[];
   items: any[];
   contracts: any[];
   currentItem: any | null;
+  itemById: any | null;
+  recurringInvoices: any[];
   status: "idle" | "loading" | "succeeded" | "failed";
   error: string | null;
 }
@@ -113,8 +152,10 @@ interface HaloState {
 const initialState: HaloState = {
   clients: [],
   items: [],
+  itemById: null,
   contracts: [],
   currentItem: null,
+  recurringInvoices: [],
   status: "idle",
   error: null,
 };
@@ -147,6 +188,28 @@ const haloSlice = createSlice({
         state.status = "failed";
         state.error = action.error.message || null;
       })
+      .addCase(fetchHaloItemById.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(fetchHaloItemById.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.itemById = action.payload;
+      })
+      .addCase(fetchHaloItemById.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+      .addCase(fetchHaloItemsForIngram.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(fetchHaloItemsForIngram.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.items = action.payload;
+      })
+      .addCase(fetchHaloItemsForIngram.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
       .addCase(fetchHaloContracts.pending, (state) => {
         state.status = "loading";
       })
@@ -155,6 +218,17 @@ const haloSlice = createSlice({
         state.contracts = action.payload;
       })
       .addCase(fetchHaloContracts.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+      .addCase(fetchHaloRecurringInvoices.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(fetchHaloRecurringInvoices.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.recurringInvoices = action.payload;
+      })
+      .addCase(fetchHaloRecurringInvoices.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message || null;
       })
