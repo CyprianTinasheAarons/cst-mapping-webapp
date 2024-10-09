@@ -92,8 +92,8 @@ export function SyncDashboard() {
 
   useEffect(() => {
     if (ingramStatus === "idle") {
-      dispatch(fetchIngramClients());
-      dispatch(fetchIngramHaloItems());
+      dispatch(fetchIngramClients()).unwrap();
+      dispatch(fetchIngramHaloItems()).unwrap();
     }
   }, [ingramStatus]);
 
@@ -162,8 +162,8 @@ export function SyncDashboard() {
         setSyncedCustomer(selectedHalo.name);
 
         // Fetch updated Halo state
-        await dispatch(fetchHaloClients());
-        await dispatch(fetchHaloItems());
+        await dispatch(fetchHaloClients()).unwrap();
+        await dispatch(fetchHaloItems()).unwrap();
 
         toast.success(`Successfully synced with ${selectedHalo.name}`);
       } catch (error) {
@@ -189,8 +189,8 @@ export function SyncDashboard() {
         setSyncedCustomer(null);
 
         // Fetch updated Halo state
-        await dispatch(fetchHaloClients());
-        await dispatch(fetchHaloItems());
+        await dispatch(fetchHaloClients()).unwrap();
+        await dispatch(fetchHaloItems()).unwrap();
 
         toast.success("Successfully unsynced customer");
       } catch (error) {
@@ -238,8 +238,10 @@ export function SyncDashboard() {
         ).unwrap();
 
         // Fetch updated Halo state
-        await dispatch(fetchHaloClients());
-        await dispatch(fetchHaloItems());
+        await dispatch(fetchHaloClients()).unwrap();
+        await dispatch(fetchHaloItems()).unwrap();
+        await dispatch(fetchIngramClients()).unwrap();
+        await dispatch(fetchIngramHaloItems()).unwrap();
 
         toast.success(
           `Successfully synced ${subscriptionName} with Halo item ${selectedHaloItem.name}`
@@ -273,8 +275,11 @@ export function SyncDashboard() {
         console.log("Unsynced subscription", subscriptionId, subscriptionName);
 
         // Fetch updated Halo state
-        await dispatch(fetchHaloClients());
-        await dispatch(fetchHaloItems());
+        await dispatch(fetchHaloClients()).unwrap();
+        await dispatch(fetchHaloItems()).unwrap();
+        await dispatch(fetchIngramClients()).unwrap();
+        await dispatch(fetchIngramHaloItems()).unwrap();
+        setSelectedHaloItems({});
 
         toast.success(`Successfully unsynced ${subscriptionName}`);
       } catch (error) {
@@ -303,8 +308,10 @@ export function SyncDashboard() {
       ).unwrap();
 
       // Fetch updated Ingram state
-      await dispatch(fetchIngramClients());
-      await dispatch(fetchIngramHaloItems());
+      await dispatch(fetchIngramClients()).unwrap();
+      await dispatch(fetchIngramHaloItems()).unwrap();
+      await dispatch(fetchHaloClients()).unwrap();
+      await dispatch(fetchHaloItems()).unwrap();
 
       toast.success(
         `Successfully updated disabled status for subscription ${subscriptionId}`
@@ -338,8 +345,10 @@ export function SyncDashboard() {
       }));
 
       // Fetch updated Ingram state
-      await dispatch(fetchIngramClients());
-      await dispatch(fetchIngramHaloItems());
+      await dispatch(fetchIngramClients()).unwrap();
+      await dispatch(fetchIngramHaloItems()).unwrap();
+      await dispatch(fetchHaloClients()).unwrap();
+      await dispatch(fetchHaloItems()).unwrap();
 
       toast.success(
         `Successfully updated override for subscription ${subscriptionId}`
