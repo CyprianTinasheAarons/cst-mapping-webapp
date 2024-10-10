@@ -40,7 +40,7 @@ export const useIngramSync = () => {
   } = useAppSelector((state) => state.ingram);
   const {
     clients: haloClients,
-    items: haloItems,
+    itemsForIngram: haloItems,
     currentItem,
     status: haloStatus,
   } = useAppSelector((state) => state.halo);

@@ -167,6 +167,7 @@ export const updateHaloInvoice = createAsyncThunk(
 interface HaloState {
   clients: any[];
   items: any[];
+  itemsForIngram: any[];
   contracts: any[];
   currentItem: any | null;
   itemById: any | null;
@@ -178,6 +179,7 @@ interface HaloState {
 const initialState: HaloState = {
   clients: [],
   items: [],
+  itemsForIngram: [],
   itemById: null,
   contracts: [],
   currentItem: null,
@@ -230,7 +232,7 @@ const haloSlice = createSlice({
       })
       .addCase(fetchHaloItemsForIngram.fulfilled, (state, action) => {
         state.status = "succeeded";
-        state.items = action.payload;
+        state.itemsForIngram = action.payload;
       })
       .addCase(fetchHaloItemsForIngram.rejected, (state, action) => {
         state.status = "failed";
