@@ -799,25 +799,8 @@ export function GammaSyncDashboard() {
                                                       customer.halo_name ?? ""
                                                     )
                                                   }
-                                                  //@ts-ignore
-                                                  disabled={
-                                                    !subscription.item_synced ||
-                                                    selectedHaloItems[
-                                                      subscription.id
-                                                    ] ||
-                                                    syncingSubscriptions[
-                                                      subscription.id
-                                                    ]
-                                                  }
                                                 >
-                                                  {isCreatingInvoice ? (
-                                                    <BeatLoader
-                                                      color="#ffffff"
-                                                      size={8}
-                                                    />
-                                                  ) : (
-                                                    "Add Recurring Invoice"
-                                                  )}
+                                                  Add Recurring Invoice
                                                 </Button>
                                               </div>
                                             </PopoverContent>
@@ -1007,8 +990,11 @@ export function GammaSyncDashboard() {
               <Search className="h-4 w-4" />
             </Button>
           </div>
-          <Table>
-            <TableHeader>
+          {!agreements ? (
+            <p>Loading agreements...</p>
+          ) : (
+            <Table>
+              <TableHeader>
               <TableRow>
                 <TableHead>Agreement Name</TableHead>
                 <TableHead>Type</TableHead>
@@ -1040,8 +1026,9 @@ export function GammaSyncDashboard() {
                   </TableCell>
                 </TableRow>
               ))}
-            </TableBody>
-          </Table>
+              </TableBody>
+              </Table>
+          )}
           <div className="flex justify-between mt-4">
             <Button
               variant="outline"
