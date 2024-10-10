@@ -16,7 +16,7 @@ export const fetchHaloClients = createAsyncThunk(
 
 export const fetchHaloItems = createAsyncThunk("halo/fetchItems", async () => {
   const response = await HaloService.getHaloItems();
-  return response.data;
+  return response.data.items;
 });
 
 export const fetchHaloItemById = createAsyncThunk(
@@ -133,6 +133,32 @@ export const fetchBitdefenderHaloItem = createAsyncThunk(
   async (id: number) => {
     const response = await BitdefenderService.getBitdefenderItemWithCustomer(
       id
+    );
+    return response.data;
+  }
+);
+
+export const updateHaloInvoice = createAsyncThunk(
+  "halo/updateInvoice",
+  async ({
+    id,
+    client_id,
+    contract_id,
+    items,
+    old_lines,
+  }: {
+    id: number;
+    client_id: number;
+    contract_id: string;
+    items: Array<{ [key: string]: any }>;
+    old_lines: Array<{ [key: string]: any }>;
+  }) => {
+    const response = await HaloService.updateHaloInvoice(
+      id,
+      client_id,
+      contract_id,
+      items,
+      old_lines
     );
     return response.data;
   }
@@ -278,6 +304,19 @@ const haloSlice = createSlice({
         state.currentItem = action.payload;
       })
       .addCase(fetchGammaHaloItem.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+      .addCase(updateHaloInvoice.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(updateHaloInvoice.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.recurringInvoices = state.recurringInvoices.map((invoice) =>
+          invoice.id === action.payload.id ? action.payload : invoice
+        );
+      })
+      .addCase(updateHaloInvoice.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message || null;
       });

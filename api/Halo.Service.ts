@@ -50,14 +50,41 @@ export const getHaloRecurringInvoices = (
   });
 };
 
+export const createHaloRecurringInvoice = (
+  clientId: number,
+  contractId: string,
+  items: Array<{
+    id: number;
+    count: number;
+    accountsid: string;
+    baseprice: number;
+  }>
+) => {
+  return httpCommon.post(`/halo/recurring-invoice`, items, {
+    params: {
+      client_id: clientId,
+      contract_id: contractId,
+    },
+  });
+};
+
 export const createHaloRecurringInvoiceTemplate = (
   data: Record<string, any>
 ) => {
   return httpCommon.post(`/halo/recurring-invoice-template`, data);
 };
 
-export const createHaloRecurringInvoice = (data: Record<string, any>) => {
-  return httpCommon.post(`/halo/recurring-invoice`, data);
+export const updateHaloInvoice = (
+  id: number,
+  clientId: number,
+  contractId: string,
+  items: Array<Record<string, any>>,
+  old_lines: Array<Record<string, any>>
+) => {
+  return httpCommon.post(`/halo/invoice/${id}/${clientId}/${contractId}`, {
+    items,
+    old_lines,
+  });
 };
 
 const HaloService = {
@@ -69,6 +96,7 @@ const HaloService = {
   createHaloRecurringInvoiceTemplate,
   createHaloRecurringInvoice,
   getHaloItemById,
+  updateHaloInvoice,
 };
 
 export default HaloService;

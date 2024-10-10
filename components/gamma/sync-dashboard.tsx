@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,7 +20,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Search, AlertCircle, RefreshCw, X } from "lucide-react";
+import {
+  AlertCircle,
+  Search,
+  RefreshCw,
+  X,
+  Lock,
+  Hash,
+  Unlock,
+} from "lucide-react";
 import {
   Pagination,
   PaginationContent,
@@ -39,7 +48,6 @@ import {
   fetchHaloClients,
   fetchHaloItems,
   fetchHaloContracts,
-  createHaloRecurringInvoice,
   fetchGammaHaloItem,
 } from "../../slices/halo/haloSlice";
 import {
@@ -60,7 +68,6 @@ import {
 import { BeatLoader } from "react-spinners";
 import { ComboboxDemo } from "@/components/ui/combobox";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Lock, Hash, Unlock } from "lucide-react";
 
 export function GammaSyncDashboard() {
   const [customerSearch, setCustomerSearch] = React.useState("");
@@ -74,6 +81,7 @@ export function GammaSyncDashboard() {
   );
 
   const dispatch = useAppDispatch();
+  const router = useRouter();
 
   const {
     customers: gammaCustomers,
@@ -402,34 +410,12 @@ export function GammaSyncDashboard() {
 
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
 
-  const handleCreateRecurringInvoice = async () => {
-    if (!isCreatingInvoice) {
-      setIsCreatingInvoice(true);
-      try {
-        await dispatch(
-          createHaloRecurringInvoice({
-            clientId: selectedAgreement?.client_id,
-            contractId: selectedAgreement?.id,
-            items: [currentItem],
-          })
-        ).unwrap();
-        toast.success("Recurring invoice created successfully");
-        setIsInvoiceDialogOpen(false);
-      } catch (error) {
-        console.error("Error creating recurring invoice:", error);
-        toast.error("Failed to create recurring invoice. Please try again.");
-      } finally {
-        setIsCreatingInvoice(false);
-      }
-    }
-  };
-
   const [haloCustomerOptions, setHaloCustomerOptions] = useState(
     haloClients.map((client) => ({ value: client.id, label: client.name }))
   );
 
   const [haloItemOptions, setHaloItemOptions] = useState(
-    haloItems.map((item) => ({ value: item.id, label: item.name }))
+    haloItems?.map((item) => ({ value: item.id, label: item.name }))
   );
 
   useEffect(() => {
@@ -1042,7 +1028,12 @@ export function GammaSyncDashboard() {
                       variant={
                         agreement === selectedAgreement ? "default" : "outline"
                       }
-                      onClick={() => setSelectedAgreement(agreement)}
+                      onClick={() => {
+                        setSelectedAgreement(agreement);
+                        router.push(
+                          `/gamma/${agreement.id}?client=${agreement.client_name}`
+                        );
+                      }}
                     >
                       {agreement === selectedAgreement ? "Selected" : "Select"}
                     </Button>
@@ -1057,16 +1048,6 @@ export function GammaSyncDashboard() {
               onClick={() => setIsInvoiceDialogOpen(false)}
             >
               Cancel
-            </Button>
-            <Button
-              onClick={handleCreateRecurringInvoice}
-              disabled={!selectedAgreement || isCreatingInvoice}
-            >
-              {isCreatingInvoice ? (
-                <BeatLoader color="#ffffff" size={8} />
-              ) : (
-                "Create Recurring Invoice"
-              )}
             </Button>
           </div>
         </DialogContent>

@@ -828,35 +828,6 @@ export function SentineloneSyncDashboard() {
                                                     "Unsync Subscription"
                                                   )}
                                                 </Button>
-                                                <Button
-                                                  variant="ghost"
-                                                  className="justify-start"
-                                                  onClick={() =>
-                                                    handleAddRecurringInvoice(
-                                                      subscription.id,
-                                                      customer.halo_name ?? ""
-                                                    )
-                                                  }
-                                                  //@ts-ignore
-                                                  disabled={
-                                                    !subscription.item_synced ||
-                                                    selectedHaloItems[
-                                                      subscription.id
-                                                    ] ||
-                                                    syncingSubscriptions[
-                                                      subscription.id
-                                                    ]
-                                                  }
-                                                >
-                                                  {isCreatingInvoice ? (
-                                                    <BeatLoader
-                                                      color="#ffffff"
-                                                      size={8}
-                                                    />
-                                                  ) : (
-                                                    "Add Recurring Invoice"
-                                                  )}
-                                                </Button>
                                               </div>
                                             </PopoverContent>
                                           </Popover>

@@ -38,25 +38,22 @@ export function ComboboxDemo({
 }: ComboboxDemoProps) {
   const [open, setOpen] = React.useState(false);
   const [value, setValue] = React.useState(selectedValue || "");
-  const [filteredOptions, setFilteredOptions] = React.useState<ComboboxOption[]>([]);
+  const [filteredOptions, setFilteredOptions] = React.useState<ComboboxOption[]>(options);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [displayedOptions, setDisplayedOptions] = React.useState<ComboboxOption[]>([]);
   const [page, setPage] = React.useState(1);
-  const itemsPerPage = 30;
+  const itemsPerPage = 300;
 
   React.useEffect(() => {
     setValue(selectedValue || "");
   }, [selectedValue]);
 
   React.useEffect(() => {
-    if (searchTerm === "") {
-      setFilteredOptions(options);
-    } else {
-      const filtered = options.filter((option) =>
-        option.label.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredOptions(filtered);
-    }
+    const filtered = options.filter((option) =>
+      option.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      option.value.toString().toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    setFilteredOptions(filtered);
     setPage(1);
   }, [options, searchTerm]);
 

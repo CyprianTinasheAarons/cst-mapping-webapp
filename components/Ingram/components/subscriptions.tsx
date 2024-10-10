@@ -100,12 +100,7 @@ const Subscriptions = () => {
           </Button>
         </div>
       </div>
-      <PaginationComponent
-        currentPage={currentPage}
-        totalItems={totalFilteredCustomers}
-        itemsPerPage={itemsPerPage}
-        onPageChange={setCurrentPage}
-      />
+   
       <Table>
         <TableHeader>
           <TableRow>
@@ -115,11 +110,7 @@ const Subscriptions = () => {
         <TableBody>
           {ingramStatus === "loading" ? (
             <TableRow>
-              <TableCell colSpan={4} className="text-center py-8">
-                <p className="mt-4 text-sm text-muted-foreground">
-                  Loading customers and subscriptions...
-                </p>
-              </TableCell>
+              <TableCell colSpan={4} className="text-center py-8"></TableCell>
             </TableRow>
           ) : filteredCustomers.length === 0 ? (
             <TableRow>
@@ -487,6 +478,12 @@ const Subscriptions = () => {
           </div>
         </DialogContent>
       </Dialog>
+         <PaginationComponent
+        currentPage={currentPage}
+        totalItems={totalFilteredCustomers}
+        itemsPerPage={itemsPerPage}
+        onPageChange={setCurrentPage}
+      />
     </div>
   );
 };

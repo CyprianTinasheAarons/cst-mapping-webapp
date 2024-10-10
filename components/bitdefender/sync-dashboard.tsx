@@ -377,7 +377,9 @@ export function BitdefenderSyncDashboard() {
       if (selectedId) {
         try {
           console.log("Fetching item", selectedId);
-          await dispatch(fetchBitdefenderHaloItem(parseInt(selectedId))).unwrap();
+          await dispatch(
+            fetchBitdefenderHaloItem(parseInt(selectedId))
+          ).unwrap();
           console.log("Current item", currentItem);
         } catch (error) {
           console.error("Error fetching selected item:", error);
@@ -623,7 +625,9 @@ export function BitdefenderSyncDashboard() {
                         </TableRow>
                       ) : (
                         paginatedCustomers.map((customer) => (
-                          <React.Fragment key={customer.customer_bitdefender_id}>
+                          <React.Fragment
+                            key={customer.customer_bitdefender_id}
+                          >
                             <TableRow>
                               <TableCell
                                 className="font-medium bg-muted"
@@ -687,7 +691,8 @@ export function BitdefenderSyncDashboard() {
                                             {subscription.item_bitdefender_name}
                                           </div>
                                           <div className="text-sm text-muted-foreground">
-                                            ID: {subscription.item_bitdefender_id}
+                                            ID:{" "}
+                                            {subscription.item_bitdefender_id}
                                           </div>
                                           <div className="text-sm text-muted-foreground">
                                             Count: {subscription.count}
@@ -809,35 +814,6 @@ export function BitdefenderSyncDashboard() {
                                                     />
                                                   ) : (
                                                     "Unsync Subscription"
-                                                  )}
-                                                </Button>
-                                                <Button
-                                                  variant="ghost"
-                                                  className="justify-start"
-                                                  onClick={() =>
-                                                    handleAddRecurringInvoice(
-                                                      subscription.id,
-                                                      customer.halo_name ?? ""
-                                                    )
-                                                  }
-                                                  //@ts-ignore
-                                                  disabled={
-                                                    !subscription.item_synced ||
-                                                    selectedHaloItems[
-                                                      subscription.id
-                                                    ] ||
-                                                    syncingSubscriptions[
-                                                      subscription.id
-                                                    ]
-                                                  }
-                                                >
-                                                  {isCreatingInvoice ? (
-                                                    <BeatLoader
-                                                      color="#ffffff"
-                                                      size={8}
-                                                    />
-                                                  ) : (
-                                                    "Add Recurring Invoice"
                                                   )}
                                                 </Button>
                                               </div>

@@ -112,7 +112,7 @@ const InvoicesPage: React.FC = () => {
     <div className="p-6 min-h-screen">
       <Button
         variant="outline"
-        onClick={() => router.push("/ingram")}
+        onClick={() => router.push("/gamma")}
         className="mb-4"
       >
         <svg
@@ -130,7 +130,7 @@ const InvoicesPage: React.FC = () => {
           />
         </svg>
       </Button>
-      <h1 className="text-3xl font-bold mb-2">Ingram</h1>
+      <h1 className="text-3xl font-bold mb-2">Gamma</h1>
       <h2 className="text-xl font-semibold mb-4">{customerName}</h2>
       <h3 className="text-lg font-medium mb-4">Recurring Invoices</h3>
       <Table>
@@ -365,7 +365,7 @@ const InvoicesPage: React.FC = () => {
                 )}
               </Button>
             ) : (
-              <Button onClick={() => router.push("/ingram")}>
+              <Button onClick={() => router.push("/gamma")}>
                 Go Select Item
               </Button>
             )}
