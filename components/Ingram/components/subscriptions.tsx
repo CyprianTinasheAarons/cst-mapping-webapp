@@ -25,6 +25,7 @@ import {
   Lock,
   Hash,
   Unlock,
+  DollarSign,
 } from "lucide-react";
 
 import {
@@ -180,6 +181,10 @@ const Subscriptions = () => {
                               <div className="text-sm text-muted-foreground">
                                 ID: {subscription.item_ingram_id}
                               </div>
+                              <div className="text-sm text-muted-foreground flex items-center mt-1">
+                                <DollarSign className="h-4 w-4 mr-1" />
+                                {subscription.ingram_item_cost}
+                              </div>
                             </div>
                             <div className="flex items-center space-x-2">
                               {subscription.item_synced ? (
@@ -265,6 +270,11 @@ const Subscriptions = () => {
                                       variant="ghost"
                                       className="justify-start"
                                       onClick={() => {
+                                        // Save ingram_cost to localStorage
+                                        localStorage.setItem(
+                                          "ingram_cost",
+                                          subscription.ingram_item_cost
+                                        );
                                         handleAddRecurringInvoice(
                                           subscription.id,
                                           customer.halo_name

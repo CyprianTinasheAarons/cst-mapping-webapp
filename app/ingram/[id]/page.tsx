@@ -330,7 +330,9 @@ const InvoicesPage: React.FC = () => {
                           id: itemById.id,
                           count: count,
                           accountsid: selectedInvoice?.accountsid,
-                          baseprice: itemById.baseprice || 0,
+                          baseprice: parseFloat(
+                            localStorage.getItem("ingram_cost") || "0"
+                          ),
                         },
                       ],
                       old_lines: selectedInvoice?.lines,
