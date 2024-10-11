@@ -395,20 +395,6 @@ export function BitdefenderSyncDashboard() {
     setAgreementSearch(e.target.value);
   };
 
-  const handleAddRecurringInvoice = (
-    subscriptionId: string,
-    subscriptionName: string
-  ) => {
-    console.log(
-      "Adding recurring invoice for",
-      subscriptionId,
-      subscriptionName
-    );
-    setAgreementSearch(subscriptionName);
-    setSelectedId(subscriptionId);
-    setIsInvoiceDialogOpen(true);
-  };
-
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
 
   const handleCreateRecurringInvoice = async () => {

@@ -79,6 +79,7 @@ const Subscriptions = () => {
     agreements,
     selectedAgreement,
     handleAgreementSearch,
+    paginatedCustomers
   } = useIngramSync();
 
   const router = useRouter();
@@ -113,7 +114,7 @@ const Subscriptions = () => {
             <TableRow>
               <TableCell colSpan={4} className="text-center py-8"></TableCell>
             </TableRow>
-          ) : filteredCustomers.length === 0 ? (
+          ) : paginatedCustomers.length === 0 ? (
             <TableRow>
               <TableCell colSpan={4} className="text-center py-8">
                 <p className="text-sm text-muted-foreground">
@@ -122,7 +123,7 @@ const Subscriptions = () => {
               </TableCell>
             </TableRow>
           ) : (
-            filteredCustomers.map((customer) => (
+            paginatedCustomers.map((customer) => (
               <React.Fragment key={customer.customer_ingram_id}>
                 <TableRow>
                   <TableCell className="font-medium bg-muted" colSpan={4}>
