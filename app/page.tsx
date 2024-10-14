@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { SubmitButton } from "./login/submit-button";
+import { Button } from "@/components/ui/button";
 
 export default function Login({
   searchParams,
@@ -28,19 +29,16 @@ export default function Login({
     return redirect("/home");
   };
 
-  const signUp = async (formData: FormData) => {
+  const signInWithAzure = async () => {
     "use server";
 
-    const origin = headers().get("origin");
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
     const supabase = createClient();
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "azure",
       options: {
-        emailRedirectTo: `${origin}/auth/callback`,
+        scopes: "email",
+        redirectTo: "http://localhost:3000/auth/callback",
       },
     });
 
@@ -48,12 +46,15 @@ export default function Login({
       return redirect("/?message=Could not authenticate user");
     }
 
-    return redirect("/?message=Check email to continue sign in process");
+    return redirect(data.url);
   };
 
   return (
-    <div className=" flex items-center justify-center h-screen bg-[#0C797D] w-screen relative">
-      <div className="absolute inset-0 bg-cover bg-center z-0" style={{ backgroundImage: "url('/bg.webp')" }}></div>
+    <div className="flex items-center justify-center h-screen bg-[#0C797D] w-screen relative">
+      <div
+        className="absolute inset-0 bg-cover bg-center z-0"
+        style={{ backgroundImage: "url('/bg.webp')" }}
+      ></div>
       <div className="relative z-10 w-full max-w-md mx-auto">
         <div className="bg-white/90 rounded-lg shadow-xl p-8">
           <div className="space-y-8">
@@ -69,7 +70,7 @@ export default function Login({
                 Customer Mapping
               </h2>
             </div>
-            <form className="mt-8 space-y-6" action="#" method="POST">
+            <form className="mt-8 space-y-6" action={signIn} method="POST">
               <input type="hidden" name="remember" value="true" />
               <div className="rounded-md shadow-sm -space-y-px">
                 <div>
@@ -104,24 +105,34 @@ export default function Login({
 
               <div>
                 <SubmitButton
-                  formAction={signIn}
                   className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-lg font-medium rounded-md text-white bg-[#0C797D] hover:bg-[#0A6A6E] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0C797D] uppercase"
                   pendingText="Signing In..."
                 >
                   Sign In
                 </SubmitButton>
               </div>
-
-              {/* <div>
-                <SubmitButton
-                  formAction={signUp}
-                  className="group relative w-full flex justify-center py-2 px-4 border border-[#0C797D] text-sm font-medium rounded-md text-[#0C797D] bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0C797D]"
-                  pendingText="Signing Up..."
-                >
-                  Sign Up
-                </SubmitButton>
-              </div> */}
             </form>
+            <div>
+              <form action={signInWithAzure}>
+                <SubmitButton className="group relative w-full flex justify-center items-center py-4 px-6 border border-transparent text-xl font-medium rounded-md text-white bg-[#0C797D] hover:bg-[#0A6A6E] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0C797D] transition-all duration-300 ease-in-out">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-6 w-6 mr-2"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+                    />
+                  </svg>
+                  Sign In with SSO
+                </SubmitButton>
+              </form>
+            </div>
             {searchParams?.message && (
               <p className="mt-2 text-center text-sm text-[#0C797D] bg-[#E6F3F3] p-2 rounded ">
                 {searchParams.message}
