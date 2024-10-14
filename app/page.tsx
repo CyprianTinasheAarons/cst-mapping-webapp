@@ -1,9 +1,7 @@
 import Image from "next/image";
-import { headers } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { SubmitButton } from "./login/submit-button";
-import { Button } from "@/components/ui/button";
 
 export default function Login({
   searchParams,
