@@ -38,7 +38,7 @@ export default function Login({
       provider: "azure",
       options: {
         scopes: "email",
-        redirectTo: "http://localhost:3000/auth/callback",
+        redirectTo: "https://cst-mapping-webapp.vercel.app/auth/callback",
       },
     });
 
