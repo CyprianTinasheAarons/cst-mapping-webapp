@@ -11,7 +11,6 @@ import {
 } from "@/slices/halo/haloSlice";
 import {
   createAutoSyncRecurringInvoice,
-  fetchAutoSyncRecurringInvoice,
   updateAutoSyncRecurringInvoice,
   fetchAllAutoSyncRecurringInvoices,
 } from "@/slices/ingram/ingramAutoSyncSlice";
@@ -402,25 +401,7 @@ const InvoicesPage: React.FC = () => {
                     );
 
                     if (autoSyncInvoice) {
-                      await dispatch(
-                        updateAutoSyncRecurringInvoice({
-                          invoiceId: negativeToPositive(
-                            autoSyncInvoice.invoice_id
-                          ),
-                          data: {
-                            items: [
-                              ...autoSyncInvoice.items,
-                              {
-                                id: itemById.id,
-                                count: count,
-                                baseprice: parseFloat(
-                                  localStorage.getItem("ingram_cost") || "0"
-                                ),
-                              },
-                            ],
-                          },
-                        })
-                      ).unwrap();
+                      return;
                     } else {
                       await dispatch(
                         createAutoSyncRecurringInvoice({
