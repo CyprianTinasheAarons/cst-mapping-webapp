@@ -5,6 +5,7 @@ import bitdefenderReducer from "../slices/bitdefender/bitdefenderSlice";
 import sentinelOneReducer from "../slices/sentinelOne/sentinelOneSlice";
 import duoReducer from "../slices/duo/duoSlice";
 import gammaReducer from "../slices/gamma/gammaSlice";
+import ingramAutoSyncReducer from "../slices/ingram/ingramAutoSyncSlice";
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
     sentinelOne: sentinelOneReducer,
     duo: duoReducer,
     gamma: gammaReducer,
+    ingramAutoSync: ingramAutoSyncReducer,
   },
 });
 

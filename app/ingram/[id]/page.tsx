@@ -10,6 +10,12 @@ import {
   updateHaloInvoice,
 } from "@/slices/halo/haloSlice";
 import {
+  createAutoSyncRecurringInvoice,
+  fetchAutoSyncRecurringInvoice,
+  updateAutoSyncRecurringInvoice,
+  fetchAllAutoSyncRecurringInvoices,
+} from "@/slices/ingram/ingramAutoSyncSlice";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -43,6 +49,7 @@ import { Loader2 } from "lucide-react";
 import { BeatLoader } from "react-spinners";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { Toggle } from "@/components/ui/toggle";
 
 const InvoicesPage: React.FC = () => {
   const { id } = useParams();
@@ -51,6 +58,9 @@ const InvoicesPage: React.FC = () => {
   const dispatch = useAppDispatch();
   const { recurringInvoices, currentItem, itemById } = useAppSelector(
     (state) => state.halo
+  );
+  const { recurringInvoices: autoSyncInvoices } = useAppSelector(
+    (state) => state.ingramAutoSync
   );
   const [customerName, setCustomerName] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -65,15 +75,23 @@ const InvoicesPage: React.FC = () => {
   useEffect(() => {
     if (id) {
       setIsLoading(true);
-      dispatch(fetchHaloRecurringInvoices(parseInt(id as string))).unwrap();
-
-      setIsLoading(false);
+      Promise.all([
+        dispatch(fetchHaloRecurringInvoices(parseInt(id as string))).unwrap(),
+        dispatch(fetchAllAutoSyncRecurringInvoices()).unwrap(),
+      ])
+        .then(() => {
+          setIsLoading(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching data:", error);
+          setIsLoading(false);
+        });
     }
     const clientName = searchParams.get("client");
     if (clientName) {
       setCustomerName(clientName);
     }
-  }, [id, dispatch, searchParams, toast]);
+  }, [id, dispatch, searchParams]);
 
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -87,18 +105,45 @@ const InvoicesPage: React.FC = () => {
   useEffect(() => {
     if (currentItem) {
       setIsLoading(true);
-      dispatch(fetchHaloItemById(currentItem.id)).unwrap();
-      setIsLoading(false);
+      dispatch(fetchHaloItemById(currentItem.id))
+        .unwrap()
+        .then(() => setIsLoading(false))
+        .catch((error) => {
+          console.error("Error fetching item by ID:", error);
+          setIsLoading(false);
+        });
     }
-  }, [currentItem, dispatch, toast]);
+  }, [currentItem, dispatch]);
 
-  // Function to convert negative ID to positive ID
   function negativeToPositive(id: number) {
     if (id < 0) {
       return Math.abs(id) - 9;
     }
-    return id; // Return as is if already positive or zero
+    return id;
   }
+
+  const handleAutoSyncToggle = async (invoice: any) => {
+    const autoSyncInvoice = autoSyncInvoices.find(
+      (asi) => asi.invoice_id === negativeToPositive(invoice.id)
+    );
+
+    if (autoSyncInvoice) {
+      try {
+        await dispatch(
+          updateAutoSyncRecurringInvoice({
+            invoiceId: autoSyncInvoice.invoice_id,
+            autosync: !autoSyncInvoice.autosync,
+          })
+        ).unwrap();
+        toast.success("Auto-sync status updated successfully");
+      } catch (error) {
+        console.error("Error updating auto-sync status:", error);
+        toast.error("Failed to update auto-sync status");
+      }
+    } else {
+      toast.error("Auto-sync record not found for this invoice");
+    }
+  };
 
   if (isLoading) {
     return (
@@ -141,62 +186,75 @@ const InvoicesPage: React.FC = () => {
             <TableHead>Contract Ref</TableHead>
             <TableHead>Next Creation Date</TableHead>
             <TableHead>Action</TableHead>
+            <TableHead>Auto Sync</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {currentItems.map((invoice) => (
-            <TableRow key={invoice.id}>
-              <TableCell>{negativeToPositive(invoice.id)}</TableCell>
-              <TableCell>{invoice.client_name}</TableCell>
-              <TableCell>{invoice.contract_ref}</TableCell>
-              <TableCell>
-                {new Date(invoice.nextcreationdate).toLocaleDateString()}
-              </TableCell>
-              <TableCell>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedInvoice(invoice);
-                          setIsLineItemsDialogOpen(true);
-                        }}
-                      >
-                        View Line Items
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>View line items for this invoice</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </TableCell>
-              <TableCell>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          console.log(invoice);
-                          setSelectedInvoice(invoice);
-                          setIsRecurringItemFormOpen(true);
-                        }}
-                      >
-                        Add Recurring Item
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Add a recurring item to this invoice</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </TableCell>
-            </TableRow>
-          ))}
+          {currentItems.map((invoice) => {
+            const autoSyncInvoice = autoSyncInvoices.find(
+              (asi) => asi.invoice_id === negativeToPositive(invoice.id)
+            );
+            return (
+              <TableRow key={invoice.id}>
+                <TableCell>{negativeToPositive(invoice.id)}</TableCell>
+                <TableCell>{invoice.client_name}</TableCell>
+                <TableCell>{invoice.contract_ref}</TableCell>
+                <TableCell>
+                  {new Date(invoice.nextcreationdate).toLocaleDateString()}
+                </TableCell>
+                <TableCell>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedInvoice(invoice);
+                            setIsLineItemsDialogOpen(true);
+                          }}
+                        >
+                          View Items
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>View line items for this invoice</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="ml-2"
+                          onClick={() => {
+                            setSelectedInvoice(invoice);
+                            setIsRecurringItemFormOpen(true);
+                          }}
+                        >
+                          Add Item
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Add a recurring item to this invoice</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </TableCell>
+                <TableCell>
+                  <Toggle
+                    pressed={autoSyncInvoice?.autosync}
+                    onPressedChange={() => handleAutoSyncToggle(invoice)}
+                    variant="outline"
+                  >
+                    {autoSyncInvoice?.autosync ? "Auto Synced" : "Unsynced"}
+                  </Toggle>
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
       <Pagination className="mt-4">
@@ -305,7 +363,6 @@ const InvoicesPage: React.FC = () => {
                     defaultValue={count}
                     className="w-20 mt-1"
                     onChange={(e) => {
-                      /* Handle count change */
                       setCount(parseInt(e.target.value));
                     }}
                   />
@@ -318,46 +375,90 @@ const InvoicesPage: React.FC = () => {
           <div className="flex justify-end mt-4">
             {itemById !== null ? (
               <Button
-                onClick={() => {
+                onClick={async () => {
                   setIsSyncing(true);
-                  dispatch(
-                    updateHaloInvoice({
-                      id: negativeToPositive(selectedInvoice?.id),
-                      client_id: selectedInvoice?.client_id,
-                      contract_id: selectedInvoice?.contract_id,
-                      items: [
-                        {
-                          id: itemById.id,
-                          count: count,
-                          accountsid: selectedInvoice?.accountsid,
-                          baseprice: parseFloat(
-                            localStorage.getItem("ingram_cost") || "0"
+                  try {
+                    await dispatch(
+                      updateHaloInvoice({
+                        id: negativeToPositive(selectedInvoice?.id),
+                        client_id: selectedInvoice?.client_id,
+                        contract_id: selectedInvoice?.contract_id,
+                        items: [
+                          {
+                            id: itemById.id,
+                            count: count,
+                            accountsid: selectedInvoice?.accountsid,
+                            baseprice: parseFloat(
+                              localStorage.getItem("ingram_cost") || "0"
+                            ),
+                          },
+                        ],
+                        old_lines: selectedInvoice?.lines,
+                      })
+                    ).unwrap();
+
+                    const autoSyncInvoice = autoSyncInvoices.find(
+                      (asi) => asi.invoice_id === selectedInvoice.id
+                    );
+
+                    if (autoSyncInvoice) {
+                      await dispatch(
+                        updateAutoSyncRecurringInvoice({
+                          invoiceId: negativeToPositive(
+                            autoSyncInvoice.invoice_id
                           ),
-                        },
-                      ],
-                      old_lines: selectedInvoice?.lines,
-                    })
-                  )
-                    .unwrap()
-                    .then(() => {
-                      setSelectedInvoice(null);
-                      setIsRecurringItemFormOpen(false);
-                      toast.success(
-                        `Successfully added recurring item to invoice ${negativeToPositive(
-                          selectedInvoice.id
-                        )}`
-                      );
-                      setIsSyncing(false);
-                    })
-                    .catch(() => {
-                      setIsSyncing(false);
-                      setIsRecurringItemFormOpen(false);
-                      toast.error(
-                        `Failed to add recurring item to invoice ${negativeToPositive(
-                          selectedInvoice.id
-                        )}`
-                      );
-                    });
+                          data: {
+                            items: [
+                              ...autoSyncInvoice.items,
+                              {
+                                id: itemById.id,
+                                count: count,
+                                baseprice: parseFloat(
+                                  localStorage.getItem("ingram_cost") || "0"
+                                ),
+                              },
+                            ],
+                          },
+                        })
+                      ).unwrap();
+                    } else {
+                      await dispatch(
+                        createAutoSyncRecurringInvoice({
+                          agreement_id: selectedInvoice.contract_id,
+                          autosync: true,
+                          client_id: selectedInvoice.client_id,
+                          invoice_id: negativeToPositive(selectedInvoice.id),
+                          items: [
+                            {
+                              id: itemById.id,
+                              count: count,
+                              baseprice: parseFloat(
+                                localStorage.getItem("ingram_cost") || "0"
+                              ),
+                            },
+                          ],
+                          old_lines: selectedInvoice.lines,
+                        })
+                      ).unwrap();
+                    }
+
+                    setSelectedInvoice(null);
+                    setIsRecurringItemFormOpen(false);
+                    toast.success(
+                      `Successfully added recurring item to invoice ${negativeToPositive(
+                        selectedInvoice.id
+                      )}`
+                    );
+                  } catch (error) {
+                    console.error("Error adding recurring item:", error);
+                    toast.error(
+                      `Failed to add recurring item to invoice ${negativeToPositive(
+                        selectedInvoice.id
+                      )}`
+                    );
+                  } finally {
+                    setIsSyncing(false);
+                  }
                 }}
               >
                 {isSyncing ? (
