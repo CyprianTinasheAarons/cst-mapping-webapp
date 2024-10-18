@@ -132,7 +132,7 @@ const ingramAutoSyncSlice = createSlice({
         (state, action: PayloadAction<RecurringInvoice>) => {
           state.status = "succeeded";
           const index = state.recurringInvoices.findIndex(
-            (invoice) => invoice.id === action.payload.id
+            (invoice) => invoice.invoice_id === action.payload.invoice_id
           );
           if (index !== -1) {
             state.recurringInvoices[index] = action.payload;
@@ -151,7 +151,7 @@ const ingramAutoSyncSlice = createSlice({
         (state, action: PayloadAction<number>) => {
           state.status = "succeeded";
           state.recurringInvoices = state.recurringInvoices.filter(
-            (invoice) => invoice.id !== action.payload
+            (invoice) => invoice.invoice_id !== action.payload
           );
         }
       )
