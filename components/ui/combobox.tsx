@@ -38,11 +38,8 @@ export function ComboboxDemo({
 }: ComboboxDemoProps) {
   const [open, setOpen] = React.useState(false);
   const [value, setValue] = React.useState(selectedValue || "");
-  const [filteredOptions, setFilteredOptions] = React.useState<ComboboxOption[]>(options);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [displayedOptions, setDisplayedOptions] = React.useState<ComboboxOption[]>([]);
-  const [page, setPage] = React.useState(1);
-  const itemsPerPage = 300;
 
   React.useEffect(() => {
     setValue(selectedValue || "");
@@ -53,13 +50,8 @@ export function ComboboxDemo({
       option.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
       option.value.toString().toLowerCase().includes(searchTerm.toLowerCase())
     );
-    setFilteredOptions(filtered);
-    setPage(1);
+    setDisplayedOptions(filtered);
   }, [options, searchTerm]);
-
-  React.useEffect(() => {
-    setDisplayedOptions(filteredOptions.slice(0, page * itemsPerPage));
-  }, [filteredOptions, page]);
 
   if (!options || options.length === 0) {
     return <div>Loading options...</div>;
@@ -67,13 +59,6 @@ export function ComboboxDemo({
 
   const handleInputChange = (input: string) => {
     setSearchTerm(input);
-  };
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const bottom = e.currentTarget.scrollHeight - e.currentTarget.scrollTop === e.currentTarget.clientHeight;
-    if (bottom && displayedOptions.length < filteredOptions.length) {
-      setPage((prevPage) => prevPage + 1);
-    }
   };
 
   return (
@@ -84,6 +69,7 @@ export function ComboboxDemo({
           role="combobox"
           aria-expanded={open}
           className="w-[350px] justify-between text-black"
+          onClick={() => setOpen(true)}
         >
           {value
             ? options.find((option) => option.value === value)?.label || ""
@@ -96,9 +82,10 @@ export function ComboboxDemo({
           <CommandInput
             placeholder={`Search ${placeholder.toLowerCase()}...`}
             onValueChange={handleInputChange}
+            value={searchTerm}
             className="w-full"
           />
-          <CommandList className="max-h-[300px] overflow-y-auto" onScroll={handleScroll}>
+          <CommandList className="max-h-[300px] overflow-y-auto">
             <CommandEmpty>No {placeholder.toLowerCase()} found.</CommandEmpty>
             <CommandGroup>
               {displayedOptions.map((option) => (
@@ -109,6 +96,7 @@ export function ComboboxDemo({
                     setValue(currentValue);
                     setOpen(false);
                     onSelect(currentValue);
+                    setSearchTerm("");
                   }}
                   className="text-xs"
                 >
