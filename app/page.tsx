@@ -48,14 +48,15 @@ export default async function Login({
   };
 
   const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  const { data, error } = await supabase.auth.getUser();
-
-  if (error || !data?.user) {
-    return redirect("/");
+  if (!session && !searchParams.message) {
+    return redirect("/?message=Please log in to access the dashboard");
+  } else {
+    return redirect("/home");
   }
-
-  return redirect("/home");
 
   return (
     <div className="flex items-center justify-center h-screen bg-[#0C797D] w-screen relative">
