@@ -10,12 +10,28 @@ export default async function Login({
 }) {
   const supabase = createClient();
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-  if (session) {
-    redirect("/home");
+    if (session) {
+      redirect("/home");
+    }
+  } catch (error) {
+    console.error("Error fetching session:", error);
+    // Log more details about the error
+    if (error instanceof Error) {
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+    }
+    // Attempt to clear the session data
+    try {
+      await supabase.auth.signOut();
+    } catch (signOutError) {
+      console.error("Error during sign out:", signOutError);
+    }
   }
 
   const signIn = async (formData: FormData) => {
@@ -25,16 +41,19 @@ export default async function Login({
     const password = formData.get("password") as string;
     const supabase = createClient();
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) {
+      if (error) throw error;
+
+      return redirect("/home");
+    } catch (error) {
+      console.error("Sign in error:", error);
       return redirect("/?message=Could not authenticate user");
     }
-
-    return redirect("/home");
   };
 
   const signInWithAzure = async () => {
@@ -42,19 +61,22 @@ export default async function Login({
 
     const supabase = createClient();
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "azure",
-      options: {
-        scopes: "email",
-        redirectTo: `${process.env.NEXT_PUBLIC_BASE_URL}auth/callback`,
-      },
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "azure",
+        options: {
+          scopes: "email",
+          redirectTo: `${process.env.NEXT_PUBLIC_BASE_URL}auth/callback`,
+        },
+      });
 
-    if (error) {
+      if (error) throw error;
+
+      return redirect(data.url);
+    } catch (error) {
+      console.error("Azure sign in error:", error);
       return redirect("/?message=Could not authenticate user");
     }
-
-    return redirect(data.url);
   };
 
   return (
