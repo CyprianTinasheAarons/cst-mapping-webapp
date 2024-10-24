@@ -47,6 +47,16 @@ export default async function Login({
     return redirect(data.url);
   };
 
+  const supabase = createClient();
+
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error || !data?.user) {
+    return redirect("/");
+  }
+
+  return redirect("/home");
+
   return (
     <div className="flex items-center justify-center h-screen bg-[#0C797D] w-screen relative">
       <div
