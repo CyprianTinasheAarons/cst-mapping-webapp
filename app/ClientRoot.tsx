@@ -15,10 +15,10 @@ export function ClientRoot({ children }: { children: React.ReactNode }) {
       const authenticated = await isAuthenticated(
         new Request(window.location.href)
       );
-      if (authenticated) {
-        router.push("/home");
-      } else {
+      if (!authenticated && window.location.pathname !== "/") {
         router.push("/");
+      } else if (authenticated && window.location.pathname === "/") {
+        return;
       }
       setAuthChecked(true);
     };
