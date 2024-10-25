@@ -4,9 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import AuthButton from "@/components/AuthButton";
 import NavLinks from "@/components/NavLinks";
-import { Montserrat } from 'next/font/google';
+import { Montserrat } from "next/font/google";
 
-const montserrat = Montserrat({ subsets: ['latin'] });
+const montserrat = Montserrat({ subsets: ["latin"] });
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -58,7 +58,7 @@ export default function RootLayout({
               className="opacity-70 mb-2"
             />
             <p className="text-sm text-gray-600 font-semibold">
-              © 2024 CST LTD. All rights reserved.
+              © {new Date().getFullYear()} CST LTD. All rights reserved.
             </p>
           </div>
         </footer>

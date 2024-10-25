@@ -1,16 +1,24 @@
 "use client";
 
 import React from "react";
-import { Bar, Line, Pie } from "react-chartjs-2";
+import { Bar, Line } from "react-chartjs-2";
 import { Chart as ChartJS, registerables } from "chart.js";
 import Header from "@/components/Header";
 import KPISummary from "@/components/reports/KPISummary";
 import DataDiscrepancyTable from "@/components/reports/DataDiscrepancyTable";
 import CustomReportForm from "@/components/reports/CustomReportForm";
-
+import { createClient } from "@/utils/supabase/client";
+import { redirect } from "next/navigation";
 ChartJS.register(...registerables);
 
-const HomePage = () => {
+const HomePage = async () => {
+  const supabase = createClient();
+  const { data: session } = await supabase.auth.getSession();
+
+  if (!session) {
+    return redirect("/");
+  }
+
   // Sample data - replace with actual data from your backend
   const mappingData = {
     labels: ["Bitdefender", "SentinelOne", "Duo", "Ingram", "Gamma", "Hudu"],

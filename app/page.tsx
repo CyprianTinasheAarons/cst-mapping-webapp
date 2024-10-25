@@ -3,11 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { SubmitButton } from "./login/submit-button";
 
-export default async function Login({
-  searchParams,
-}: {
-  searchParams: { message: string };
-}) {
+export default async function Login() {
   const signIn = async (formData: FormData) => {
     "use server";
 
@@ -46,17 +42,6 @@ export default async function Login({
 
     return redirect(data.url);
   };
-
-  const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session && !searchParams.message) {
-    return redirect("/?message=Please log in to access the dashboard");
-  } else {
-    return redirect("/home");
-  }
 
   return (
     <div className="flex items-center justify-center h-screen bg-[#0C797D] w-screen relative">
@@ -142,11 +127,6 @@ export default async function Login({
                 </SubmitButton>
               </form>
             </div>
-            {searchParams?.message && (
-              <p className="mt-2 text-center text-sm text-[#0C797D] bg-[#E6F3F3] p-2 rounded ">
-                {searchParams.message}
-              </p>
-            )}
           </div>
         </div>
       </div>
