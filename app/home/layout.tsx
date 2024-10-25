@@ -25,12 +25,13 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = createClient();
-  const { data: session } = await supabase.auth.getSession();
+  const supabase = await createClient();
 
-  if (session === null) {
-    return redirect("/");
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user) {
+    redirect("/");
   }
+
   return (
     <html lang="en">
       <body className={`flex flex-col ${montserrat.className}`}>

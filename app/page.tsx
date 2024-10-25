@@ -1,12 +1,12 @@
+"use client";
+
 import Image from "next/image";
-import { createClient } from "@/utils/supabase/server";
+import { createClient } from "@/utils/supabase/client";
 import { redirect } from "next/navigation";
 import { SubmitButton } from "./login/submit-button";
 
 export default async function Login() {
   const signIn = async (formData: FormData) => {
-    "use server";
-
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
     const supabase = createClient();
@@ -24,8 +24,6 @@ export default async function Login() {
   };
 
   const signInWithAzure = async () => {
-    "use server";
-
     const supabase = createClient();
 
     const { data, error } = await supabase.auth.signInWithOAuth({
