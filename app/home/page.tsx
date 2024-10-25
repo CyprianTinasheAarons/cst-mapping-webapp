@@ -10,7 +10,7 @@ import CustomReportForm from "@/components/reports/CustomReportForm";
 
 ChartJS.register(...registerables);
 
-const HomePage = async () => {
+const HomePage = () => {
   // Sample data - replace with actual data from your backend
   const mappingData = {
     labels: ["Bitdefender", "SentinelOne", "Duo", "Ingram", "Gamma", "Hudu"],
