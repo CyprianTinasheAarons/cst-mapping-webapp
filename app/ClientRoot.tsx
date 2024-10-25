@@ -1,35 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Provider } from "react-redux";
 import { store } from "./store";
-import { createClient } from "@/utils/supabase/client";
-import { useRouter, usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { isAuthenticated } from "@/utils/supabase/guard";
+import { useRouter } from "next/navigation";
 
 export function ClientRoot({ children }: { children: React.ReactNode }) {
-  const [isLoading, setIsLoading] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
   const router = useRouter();
-  const pathname = usePathname();
-  const supabase = createClient();
 
   useEffect(() => {
-    const checkUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user && pathname !== "/") {
-        router.push("/");
-      } else if (user && pathname === "/") {
+    const checkAuth = async () => {
+      const authenticated = await isAuthenticated(
+        new Request(window.location.href)
+      );
+      if (authenticated) {
         router.push("/home");
+      } else {
+        router.push("/");
       }
-      setIsLoading(false);
+      setAuthChecked(true);
     };
+    checkAuth();
+  }, [router]);
 
-    checkUser();
-  }, [pathname, router, supabase.auth]);
-
-  if (isLoading) {
-    return <div></div>;
+  if (!authChecked) {
+    return null; // or a loading spinner
   }
 
   return <Provider store={store}>{children}</Provider>;
