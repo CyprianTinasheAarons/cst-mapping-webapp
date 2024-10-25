@@ -7,18 +7,10 @@ import Header from "@/components/Header";
 import KPISummary from "@/components/reports/KPISummary";
 import DataDiscrepancyTable from "@/components/reports/DataDiscrepancyTable";
 import CustomReportForm from "@/components/reports/CustomReportForm";
-import { createClient } from "@/utils/supabase/client";
-import { redirect } from "next/navigation";
+
 ChartJS.register(...registerables);
 
 const HomePage = async () => {
-  const supabase = createClient();
-  const { data: session } = await supabase.auth.getSession();
-
-  if (!session) {
-    return redirect("/");
-  }
-
   // Sample data - replace with actual data from your backend
   const mappingData = {
     labels: ["Bitdefender", "SentinelOne", "Duo", "Ingram", "Gamma", "Hudu"],

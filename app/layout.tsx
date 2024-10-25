@@ -1,24 +1,25 @@
+"use client";
+
 import "./globals.css";
 import { ClientRoot } from "./ClientRoot";
 import { Montserrat } from "next/font/google";
-
+import { createClient } from "@/utils/supabase/client";
+import { redirect } from "next/navigation";
 const montserrat = Montserrat({ subsets: ["latin"] });
-
-const defaultUrl = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
-  : "http://localhost:3000";
-
-export const metadata = {
-  metadataBase: new URL(defaultUrl),
-  title: "CST Customer Mapping Dashboard",
-  description: "The fastest way to build apps with Next.js and Supabase",
-};
 
 export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    redirect("/home");
+  }
   return (
     <html lang="en">
       <body className={`flex flex-col ${montserrat.className}`}>

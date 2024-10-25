@@ -5,6 +5,8 @@ import Link from "next/link";
 import AuthButton from "@/components/AuthButton";
 import NavLinks from "@/components/NavLinks";
 import { Montserrat } from "next/font/google";
+import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
 
 const montserrat = Montserrat({ subsets: ["latin"] });
 
@@ -18,11 +20,17 @@ export const metadata = {
   description: "The fastest way to build apps with Next.js and Supabase",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = createClient();
+  const { data: session } = await supabase.auth.getSession();
+
+  if (session === null) {
+    return redirect("/");
+  }
   return (
     <html lang="en">
       <body className={`flex flex-col ${montserrat.className}`}>
