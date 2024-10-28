@@ -110,7 +110,7 @@ export default async function Login({
               </div>
             </form>
             <div>
-              <form action={signInWithAzure} method="POST">
+              <form action={signInWithAzure} method="GET">
                 <SubmitButton className="group relative w-full flex justify-center items-center py-4 px-6 border border-transparent text-xl font-medium rounded-md text-white bg-[#0C797D] hover:bg-[#0A6A6E] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0C797D] transition-all duration-300 ease-in-out">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
