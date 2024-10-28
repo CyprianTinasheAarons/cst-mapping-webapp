@@ -1,5 +1,6 @@
 import Image from "next/image";
-import { createClient } from "@/utils/supabase/server";
+import { headers, cookies } from "next/headers";
+import { createServerClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { SubmitButton } from "./login/submit-button";
 
@@ -8,27 +9,29 @@ export default async function Login({
 }: {
   searchParams: { message: string };
 }) {
-  const signIn = async (formData: FormData) => {
-    "use server";
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
-    const supabase = createClient();
+  // const signIn = async (formData: FormData) => {
+  //   "use server";
+  //   const email = formData.get("email") as string;
+  //   const password = formData.get("password") as string;
+  //   const cookieStore = cookies();
+  //   const supabase = createServerClient(cookieStore);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  //   const { error } = await supabase.auth.signInWithPassword({
+  //     email,
+  //     password,
+  //   });
 
-    if (error) {
-      return redirect(`/?message=${error.message}`);
-    }
+  //   if (error) {
+  //     return redirect(`/?message=${error.message}`);
+  //   }
 
-    return redirect("/home");
-  };
+  //   return redirect("/home");
+  // };
 
   const signInWithAzure = async () => {
     "use server";
-    const supabase = createClient();
+    const cookieStore = cookies();
+    const supabase = createServerClient(cookieStore);
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "azure",
@@ -42,7 +45,11 @@ export default async function Login({
       return redirect("/?message=Could not authenticate user");
     }
 
-    return redirect(data.url);
+    if (data.url) {
+      return redirect(data.url);
+    }
+
+    return redirect("/home");
   };
 
   return (
@@ -66,7 +73,7 @@ export default async function Login({
                 Customer Mapping
               </h2>
             </div>
-            <form className="mt-8 space-y-6" action={signIn} method="POST">
+            {/* <form className="mt-8 space-y-6" action={signIn} method="POST">
               <input type="hidden" name="remember" value="true" />
               <div className="rounded-md shadow-sm -space-y-px">
                 <div>
@@ -107,7 +114,7 @@ export default async function Login({
                   Sign In
                 </SubmitButton>
               </div>
-            </form>
+            </form> */}
             <div>
               <form action={signInWithAzure}>
                 <SubmitButton className="group relative w-full flex justify-center items-center py-4 px-6 border border-transparent text-xl font-medium rounded-md text-white bg-[#0C797D] hover:bg-[#0A6A6E] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0C797D] transition-all duration-300 ease-in-out">

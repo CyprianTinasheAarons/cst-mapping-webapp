@@ -10,7 +10,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning className={`flex flex-col ${montserrat.className}`}>
+      <body
+        suppressHydrationWarning
+        className={`flex flex-col ${montserrat.className}`}
+      >
         <ClientRoot>{children}</ClientRoot>
       </body>
     </html>
