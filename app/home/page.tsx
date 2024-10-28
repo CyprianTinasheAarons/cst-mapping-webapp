@@ -48,19 +48,6 @@ const HomePage = () => {
     ],
   };
 
-  const dataQualityData = {
-    labels: ["Clean", "Minor Issues", "Major Issues"],
-    datasets: [
-      {
-        data: [70, 25, 5],
-        backgroundColor: [
-          "rgba(75, 192, 192, 0.6)",
-          "rgba(255, 206, 86, 0.6)",
-          "rgba(255, 99, 132, 0.6)",
-        ],
-      },
-    ],
-  };
 
   return (
     <main className="flex-1 overflow-y-auto p-8">
