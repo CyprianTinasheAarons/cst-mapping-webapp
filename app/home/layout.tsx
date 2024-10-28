@@ -5,8 +5,7 @@ import Link from "next/link";
 import AuthButton from "@/components/AuthButton";
 import NavLinks from "@/components/NavLinks";
 import { Montserrat } from "next/font/google";
-import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
+
 
 const montserrat = Montserrat({ subsets: ["latin"] });
 
@@ -25,19 +24,6 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  
-  const supabase = await createClient();
-  console.log("Created Supabase client");
-
-  const { data, error } = await supabase.auth.getUser();
-  console.log("Auth response:", { data, error });
-
-  if (error || !data?.user) {
-    console.log("No authenticated user found, redirecting to home");
-    redirect("/");
-  }
-  console.log("Authenticated user:", data.user);
-
   return (
     <html lang="en">
       <body className={`flex flex-col ${montserrat.className}`}>
