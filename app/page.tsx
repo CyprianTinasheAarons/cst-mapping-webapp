@@ -1,12 +1,16 @@
-"use client";
-
+import { headers } from "next/headers";
 import Image from "next/image";
-import { createClient } from "@/utils/supabase/client";
+import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { SubmitButton } from "./login/submit-button";
 
-export default async function Login() {
+export default async function Login({
+  searchParams,
+}: {
+  searchParams: { message: string };
+}) {
   const signIn = async (formData: FormData) => {
+    "use server";
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
     const supabase = createClient();
@@ -17,13 +21,14 @@ export default async function Login() {
     });
 
     if (error) {
-      return redirect("/?message=Could not authenticate user");
+      return redirect(`/?message=${error.message}`);
     }
 
     return redirect("/home");
   };
 
   const signInWithAzure = async () => {
+    "use server";
     const supabase = createClient();
 
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -125,6 +130,11 @@ export default async function Login() {
                 </SubmitButton>
               </form>
             </div>
+            {searchParams?.message && (
+              <p className="mt-2 text-center text-sm text-[#0C797D] bg-[#E6F3F3] p-2 rounded ">
+                {searchParams.message}
+              </p>
+            )}
           </div>
         </div>
       </div>
