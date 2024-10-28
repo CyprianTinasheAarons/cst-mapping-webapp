@@ -1,41 +1,42 @@
-"use client";
-
+import "../globals.css";
 import { ClientRoot } from "../ClientRoot";
 import Image from "next/image";
 import Link from "next/link";
 import AuthButton from "@/components/AuthButton";
 import NavLinks from "@/components/NavLinks";
 import { Montserrat } from "next/font/google";
-import { createClient } from "@/utils/supabase/client";
+import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 
 const montserrat = Montserrat({ subsets: ["latin"] });
 
-export default function RootLayout({
+const defaultUrl = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
+  : "http://localhost:3000";
+
+export const metadata = {
+  metadataBase: new URL(defaultUrl),
+  title: "CST Customer Mapping Dashboard",
+  description: "The fastest way to build apps with Next.js and Supabase",
+};
+
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const router = useRouter();
+  
+  const supabase = await createClient();
+  console.log("Created Supabase client");
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const supabase = createClient();
-        const { data, error } = await supabase.auth.getUser();
-        if (error || !data?.user) {
-          router.push("/");
-        }
-      } catch (error) {
-        console.error("Auth error:", error);
-        router.push("/");
-      }
-    };
+  const { data, error } = await supabase.auth.getUser();
+  console.log("Auth response:", { data, error });
 
-    checkAuth();
-  }, [router]);
+  if (error || !data?.user) {
+    console.log("No authenticated user found, redirecting to home");
+    redirect("/");
+  }
+  console.log("Authenticated user:", data.user);
 
   return (
     <html lang="en">
