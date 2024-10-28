@@ -1,6 +1,4 @@
-import { cookies } from "next/headers";
 import Image from "next/image";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { SubmitButton } from "./login/submit-button";
@@ -46,16 +44,6 @@ export default async function Login({
 
     return redirect(data.url);
   };
-
-  const supabase = createServerComponentClient({ cookies });
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    redirect("/home");
-  }
 
   return (
     <div className="flex items-center justify-center h-screen bg-[#0C797D] w-screen relative">
