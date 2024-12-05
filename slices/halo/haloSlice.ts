@@ -317,10 +317,6 @@ const haloSlice = createSlice({
         state.recurringInvoices = state.recurringInvoices.map((invoice) =>
           invoice.id === action.payload.id ? action.payload : invoice
         );
-      })
-      .addCase(updateHaloInvoice.rejected, (state, action) => {
-        state.status = "failed";
-        state.error = action.error.message || null;
       });
   },
 });

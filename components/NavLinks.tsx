@@ -6,7 +6,14 @@ import { usePathname } from "next/navigation";
 export default function NavLinks() {
   const pathname = usePathname();
 
-  const navItems = ["Bitdefender", "Sentinelone", "Duo", "Ingram", "Gamma"];
+  const navItems = [
+    "Bitdefender",
+    "Sentinelone",
+    "Duo",
+    "Ingram",
+    "Gamma",
+    "KnowBe4",
+  ];
 
   return (
     <nav className="flex space-x-4">
