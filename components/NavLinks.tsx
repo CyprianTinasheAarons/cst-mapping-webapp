@@ -13,6 +13,7 @@ export default function NavLinks() {
     "Ingram",
     "Gamma",
     "KnowBe4",
+    "Juro"
   ];
 
   return (

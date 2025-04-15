@@ -11,3 +11,7 @@ export async function GET(request: Request) {
 
   return NextResponse.redirect(`${origin}/`);
 }
+
+
+// https://cst-mapping-webapp.vercel.app/auth/callback
+// http://localhost:3000/auth/callback

@@ -87,6 +87,10 @@ export const updateHaloInvoice = (
   });
 };
 
+export const createHaloContract = (data: Record<string, any>) => {
+  return httpCommon.post(`/halo/contracts`, data);
+};
+
 const HaloService = {
   getHaloClients,
   getHaloItems,
@@ -97,6 +101,7 @@ const HaloService = {
   createHaloRecurringInvoice,
   getHaloItemById,
   updateHaloInvoice,
+  createHaloContract,
 };
 
 export default HaloService;

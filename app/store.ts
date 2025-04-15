@@ -7,6 +7,8 @@ import duoReducer from "../slices/duo/duoSlice";
 import gammaReducer from "../slices/gamma/gammaSlice";
 import ingramAutoSyncReducer from "../slices/ingram/ingramAutoSyncSlice";
 import knowbe4Reducer from "../slices/knowbe4/knowbe4Slice";
+import juroReducer from "../slices/juro/juroSlice";
+
 export const store = configureStore({
   reducer: {
     halo: haloReducer,
@@ -17,6 +19,7 @@ export const store = configureStore({
     gamma: gammaReducer,
     ingramAutoSync: ingramAutoSyncReducer,
     knowbe4: knowbe4Reducer,
+    juro: juroReducer,
   },
 });
 
