@@ -14,6 +14,15 @@ export const fetchHaloClients = createAsyncThunk(
   }
 );
 
+export const fetchHaloClientById = createAsyncThunk(
+  "halo/fetchClientById",
+  async (clientId: number) => {
+    const response = await HaloService.getHaloClientById(clientId);
+    return response.data;
+  }
+);
+
+
 export const fetchHaloItems = createAsyncThunk("halo/fetchItems", async () => {
   const response = await HaloService.getHaloItems();
   return response.data.items;
@@ -166,6 +175,7 @@ export const updateHaloInvoice = createAsyncThunk(
 
 interface HaloState {
   clients: any[];
+  clientById: any | null;
   items: any[];
   itemsForIngram: any[];
   contracts: any[];
@@ -178,6 +188,7 @@ interface HaloState {
 
 const initialState: HaloState = {
   clients: [],
+  clientById: null,
   items: [],
   itemsForIngram: [],
   itemById: null,
@@ -202,6 +213,17 @@ const haloSlice = createSlice({
         state.clients = action.payload;
       })
       .addCase(fetchHaloClients.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+      .addCase(fetchHaloClientById.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(fetchHaloClientById.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.clientById = action.payload;
+      })
+      .addCase(fetchHaloClientById.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message || null;
       })

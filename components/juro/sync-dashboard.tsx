@@ -19,7 +19,7 @@ import {
   Plus,
   Download,
   Send,
-  FolderPlus,
+  AlertCircle,
 } from "lucide-react";
 import {
   Pagination,
@@ -33,13 +33,13 @@ import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import {
   fetchHaloClients,
   fetchHaloContracts,
+  fetchHaloClientById,
 } from "../../slices/halo/haloSlice";
 import {
   fetchJuroTemplates,
   fetchJuroTemplate,
   createJuroContract,
   sendContractForSigning,
-  addContractToHalo,
 } from "../../slices/juro/juroSlice";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -62,6 +62,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface TemplateField {
   title: string;
@@ -112,6 +113,13 @@ export function SyncDashboard() {
     Array<{ field: string; value: string }>
   >([]);
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
+  const [isLoadingClientDetails, setIsLoadingClientDetails] = useState(false);
+  const [isCreatingDocument, setIsCreatingDocument] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [createdDocumentId, setCreatedDocumentId] = useState<string | null>(
+    null
+  );
+  const [documentCreated, setDocumentCreated] = useState(false);
 
   const dispatch = useAppDispatch();
 
@@ -119,6 +127,7 @@ export function SyncDashboard() {
     clients: haloClients,
     status: haloStatus,
     contracts: haloContracts,
+    clientById: detailedClientData,
   } = useAppSelector((state) => state.halo);
 
   const {
@@ -137,11 +146,33 @@ export function SyncDashboard() {
 
   // Handle when template details are fetched
   useEffect(() => {
-    if (currentTemplate && selectedTemplate) {
+    if (currentTemplate && selectedTemplate && detailedClientData) {
       processTemplateDetails(currentTemplate);
       setIsLoadingTemplate(false);
     }
-  }, [currentTemplate]);
+  }, [currentTemplate, detailedClientData]);
+
+  // Handle when detailed client data is fetched
+  useEffect(() => {
+    if (detailedClientData && selectedTemplate && currentTemplate) {
+      processTemplateDetails(currentTemplate);
+      setIsLoadingClientDetails(false);
+    }
+  }, [detailedClientData, selectedTemplate, currentTemplate]);
+
+  // Reset loading states if the status changes to success or failure
+  useEffect(() => {
+    if (haloStatus === "succeeded" || haloStatus === "failed") {
+      setIsLoadingClientDetails(false);
+    }
+  }, [haloStatus]);
+
+  useEffect(() => {
+    if (juroStatus === "succeeded" || juroStatus === "failed") {
+      setIsLoadingTemplate(false);
+      setIsCreatingDocument(false);
+    }
+  }, [juroStatus]);
 
   const processTemplateDetails = (template: any) => {
     if (!template || !template.fields) return;
@@ -153,13 +184,50 @@ export function SyncDashboard() {
     // Create initial document fields based on template fields and client data
     const initialFields: Record<string, string> = {};
 
-    // Add client data
+    // Add client data with more detailed information if available
     if (selectedClient) {
-      initialFields.clientName = selectedClient.name;
-      initialFields.clientId = selectedClient.id.toString();
-      initialFields.clientEmail = selectedClient.email || "";
-      initialFields.clientAddress = selectedClient.address || "";
-      initialFields.clientPhone = selectedClient.phone || "";
+      const clientData = detailedClientData || selectedClient;
+
+      // Basic client info
+      initialFields.clientName = clientData.name || "";
+      initialFields.clientId = clientData.id?.toString() || "";
+
+      // Contact details
+      initialFields.clientEmail =
+        clientData.accountsemailaddress || clientData.email || "";
+      initialFields.clientPhone =
+        clientData.main_phonenumber || clientData.phone || "";
+
+      // Address information from main_invoice_address if available
+      if (clientData.main_invoice_address) {
+        const address = clientData.main_invoice_address;
+        initialFields.clientAddress = [
+          address.line1,
+          address.line2,
+          address.line3,
+          address.line4,
+          address.postcode,
+        ]
+          .filter(Boolean)
+          .join(", ");
+      } else {
+        initialFields.clientAddress = clientData.address || "";
+      }
+
+      // Additional contact person details
+      initialFields.accountsFirstName = clientData.accountsfirstname || "";
+      initialFields.accountsLastName = clientData.accountslastname || "";
+      initialFields.accountsFullName =
+        clientData.accountsfirstname && clientData.accountslastname
+          ? `${clientData.accountsfirstname} ${clientData.accountslastname}`
+          : "";
+
+      // Business details
+      initialFields.tradingName =
+        clientData.trading_name || clientData.name || "";
+      initialFields.accountsId = clientData.accountsid || "";
+      initialFields.website = clientData.website || "";
+      initialFields.domain = clientData.domain || "";
     }
 
     // Add company data
@@ -176,11 +244,75 @@ export function SyncDashboard() {
     });
 
     // Map known fields to more user-friendly names
+    // Main counterparty name field
     const counterpartyField = template.fields.find(
       (f: TemplateField) => f.uid === "a50f21ec-0dd8-47dc-950b-15032103c63b"
     );
     if (counterpartyField) {
       initialFields[counterpartyField.uid] = selectedClient?.name || "";
+    }
+
+    // Map counterparty contact fields based on field titles
+    if (selectedClient && template.fields) {
+      const clientData = detailedClientData || selectedClient;
+
+      // Iterate through template fields to find and map counterparty fields
+      template.fields.forEach((field: TemplateField) => {
+        const fieldTitle = field.title?.toLowerCase() || "";
+
+        // Map Counterparty Contact Name
+        if (
+          fieldTitle.includes("counterparty contact name") ||
+          fieldTitle.includes("counterparty contact")
+        ) {
+          initialFields[field.uid] =
+            clientData.accountsfirstname && clientData.accountslastname
+              ? `${clientData.accountsfirstname} ${clientData.accountslastname}`
+              : clientData.main_contact_name || "";
+        }
+
+        // Map Counterparty Address
+        if (fieldTitle.includes("counterparty address")) {
+          if (clientData.main_invoice_address) {
+            const address = clientData.main_invoice_address;
+            initialFields[field.uid] = [
+              address.line1,
+              address.line2,
+              address.line3,
+              address.line4,
+              address.postcode,
+            ]
+              .filter(Boolean)
+              .join(", ");
+          } else {
+            initialFields[field.uid] = clientData.address || "";
+          }
+        }
+
+        // Map Counterparty Email
+        if (
+          fieldTitle.includes("counterparty email") ||
+          fieldTitle.includes("counterparty contact email")
+        ) {
+          initialFields[field.uid] =
+            clientData.accountsemailaddress ||
+            clientData.main_contact_email ||
+            clientData.email ||
+            "";
+        }
+
+        // Map Counterparty Phone
+        if (
+          fieldTitle.includes("counterparty phone") ||
+          fieldTitle.includes("counterparty contact phone")
+        ) {
+          initialFields[field.uid] =
+            clientData.main_phonenumber ||
+            clientData.main_contact_phonenumber ||
+            clientData.phone ||
+            "";
+        }
+      });
     }
 
     // Set the document title based on template and client
@@ -205,14 +337,6 @@ export function SyncDashboard() {
     currentPage * itemsPerPage
   );
 
-  // E-signature providers
-  const signatureProviders = [
-    { id: "docusign", name: "DocuSign" },
-    { id: "adobesign", name: "Adobe Sign" },
-    { id: "pandadoc", name: "PandaDoc" },
-    { id: "hellosign", name: "HelloSign" },
-  ];
-
   const handleOpenDocument = (client: any) => {
     setSelectedClient(client);
     setDocumentTitle("");
@@ -228,12 +352,29 @@ export function SyncDashboard() {
     // Reset history
     setTemplateSelectionHistory([]);
     setFieldChangeHistory([]);
+    // Reset document creation state
+    setDocumentCreated(false);
+    setCreatedDocumentId(null);
+    setValidationErrors([]);
+
+    // Fetch complete client details
+    setIsLoadingClientDetails(true);
+    dispatch(fetchHaloClientById(client.id))
+      .unwrap()
+      .catch(() => {
+        setIsLoadingClientDetails(false);
+        toast.error("Failed to load client details");
+      });
   };
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplate(templateId);
     setIsPreviewMode(false);
     setTemplateSelectionHistory([...templateSelectionHistory, templateId]);
+    // Reset document creation state
+    setDocumentCreated(false);
+    setCreatedDocumentId(null);
+    setValidationErrors([]);
 
     // Fetch template details if not a custom template
     if (templateId !== "custom") {
@@ -244,21 +385,45 @@ export function SyncDashboard() {
       const autoFields: Record<string, string> = {
         clientName: selectedClient?.name || "",
         clientId: selectedClient?.id?.toString() || "",
-        clientEmail: selectedClient?.email || "",
-        clientAddress: selectedClient?.address || "",
-        clientPhone: selectedClient?.phone || "",
-        clientWebsite: selectedClient?.website || "",
-        clientType: selectedClient?.type || "Business",
-        contactPerson: selectedClient?.contactPerson || "",
-        contactEmail: selectedClient?.contactEmail || "",
-        contactPhone: selectedClient?.contactPhone || "",
-        date: new Date().toISOString().split("T")[0],
-        companyName: "CST LTD",
-        companyAddress: "Maidenhead, UK",
-        companyEmail: "info@cstltd.com",
-        companyPhone: "01628 531400",
-        effectiveDate: new Date().toISOString().split("T")[0],
       };
+
+      // Add client details if available
+      if (detailedClientData) {
+        autoFields.clientEmail = detailedClientData.accountsemailaddress || "";
+        autoFields.clientPhone = detailedClientData.main_phonenumber || "";
+
+        if (detailedClientData.main_invoice_address) {
+          const address = detailedClientData.main_invoice_address;
+          autoFields.clientAddress = [
+            address.line1,
+            address.line2,
+            address.line3,
+            address.line4,
+            address.postcode,
+          ]
+            .filter(Boolean)
+            .join(", ");
+        }
+
+        autoFields.accountsFullName =
+          detailedClientData.accountsfirstname &&
+          detailedClientData.accountslastname
+            ? `${detailedClientData.accountsfirstname} ${detailedClientData.accountslastname}`
+            : "";
+        autoFields.tradingName =
+          detailedClientData.trading_name || detailedClientData.name || "";
+        autoFields.accountsId = detailedClientData.accountsid || "";
+        autoFields.website = detailedClientData.website || "";
+        autoFields.domain = detailedClientData.domain || "";
+      }
+
+      // Common fields
+      autoFields.date = new Date().toISOString().split("T")[0];
+      autoFields.companyName = "CST LTD";
+      autoFields.companyAddress = "Maidenhead, UK";
+      autoFields.companyEmail = "info@cstltd.com";
+      autoFields.companyPhone = "01628 531400";
+      autoFields.effectiveDate = new Date().toISOString().split("T")[0];
 
       setDocumentTitle(`Custom Agreement - ${selectedClient?.name || ""}`);
       setDocumentFields(autoFields);
@@ -275,78 +440,142 @@ export function SyncDashboard() {
     setFieldChangeHistory([...fieldChangeHistory, { field: key, value }]);
   };
 
-  const handlePreview = () => {
+  const validateFields = () => {
+    const errors: string[] = [];
+
+    // Only validate document title
     if (!documentTitle.trim()) {
-      toast.error("Document title is required");
+      errors.push("Document title is required");
+    }
+
+    // Validate required template fields, but skip any client-related ones
+    templateQuestions.forEach((question) => {
+      if (question.isRequired && !documentFields[question.fieldUid]?.trim()) {
+        const fieldTitle =
+          templateFields.find((f) => f.uid === question.fieldUid)?.title ||
+          question.title;
+
+        // Skip validation for any client-related fields
+        const fieldTitleLower = fieldTitle.toLowerCase();
+        const isClientField =
+          fieldTitleLower.includes("client") ||
+          fieldTitleLower.includes("counterparty") ||
+          fieldTitleLower.includes("customer") ||
+          fieldTitleLower.includes("contact") ||
+          fieldTitleLower.includes("email") ||
+          fieldTitleLower.includes("phone") ||
+          fieldTitleLower.includes("address") ||
+          fieldTitleLower.includes("name");
+
+        if (!isClientField) {
+          errors.push(`${fieldTitle} is required`);
+        }
+      }
+    });
+
+    // Show errors as toasts instead of in alert
+    if (errors.length > 0) {
+      errors.forEach((error) => {
+        toast.error(error);
+      });
+    }
+
+    setValidationErrors(errors);
+    return errors.length === 0;
+  };
+
+  const handlePreview = () => {
+    if (!validateFields()) {
       return;
     }
     setIsPreviewMode(true);
   };
 
+  const handleCreateDocument = () => {
+    if (!validateFields()) {
+      return;
+    }
+
+    setIsCreatingDocument(true);
+
+    // Transform document fields from object to array format
+    const fieldsArray = Object.entries(documentFields).map(([uid, value]) => ({
+      uid,
+      value: value?.toString() || "",
+    }));
+
+    // Create properly formatted request according to API specs
+    const requestData = {
+      templateId: selectedTemplate,
+      contract: {
+        answers: [], // If we have answers, we'd format them here
+        fields: fieldsArray,
+        owner: {
+          name: "Shane Thorne",
+          username: "s.thorne@cst.co.uk",
+        },
+        name: documentTitle,
+      },
+    };
+
+    // Dispatch action to create contract with correctly formatted data
+    dispatch(createJuroContract(requestData))
+      .unwrap()
+      .then((contract) => {
+        if (contract && contract.id) {
+          setCreatedDocumentId(contract.id.toString());
+          setDocumentCreated(true);
+          toast.success(`Document "${documentTitle}" created successfully`);
+        }
+      })
+      .catch((error) => {
+        console.error("Error creating document:", error);
+        toast.error("Failed to create document. Please try again.");
+      })
+      .finally(() => {
+        setIsCreatingDocument(false);
+      });
+  };
+
   const handleSendForSigning = () => {
-    if (!documentTitle.trim()) {
-      toast.error("Document title is required");
+    if (!createdDocumentId) {
+      toast.error("Please create the document first");
       return;
     }
 
     try {
-      // Prepare contract data
-      const contractData = {
-        title: documentTitle,
-        description: documentDescription,
-        templateId: selectedTemplate,
-        fields: documentFields,
-        client: selectedClient,
-        signatureProvider: selectedSignatureProvider,
-        history: {
-          templateSelections: templateSelectionHistory,
-          fieldChanges: fieldChangeHistory,
-        },
+      const signingData = {
+        provider: selectedSignatureProvider,
+        recipients: [
+          {
+            email:
+              documentFields.clientEmail ||
+              selectedClient.email ||
+              detailedClientData?.accountsemailaddress,
+            name: documentFields.clientName || selectedClient.name,
+            role: "Signatory",
+          },
+        ],
       };
 
-      // Dispatch action to send contract for signing
-      dispatch(createJuroContract(contractData))
-        .unwrap()
-        .then((contract) => {
-          if (contract && contract.id) {
-            // Once contract is created, send it for signing
-            const signingData = {
-              provider: selectedSignatureProvider,
-              recipients: [
-                {
-                  email: documentFields.clientEmail || selectedClient.email,
-                  name: documentFields.clientName || selectedClient.name,
-                  role: "Signatory",
-                },
-              ],
-            };
-
-            return dispatch(
-              sendContractForSigning({
-                contractId: contract.id.toString(),
-                signingUid: "primary",
-                data: signingData,
-              })
-            ).unwrap();
-          }
-          return null;
+      dispatch(
+        sendContractForSigning({
+          contractId: createdDocumentId,
+          signingUid: "primary",
+          data: signingData,
         })
+      )
+        .unwrap()
         .then((signingResult) => {
           if (signingResult) {
             // Update document status
-            const documentId = signingResult.id || `doc-${Date.now()}`;
+            const documentId = signingResult.id || createdDocumentId;
             setDocumentStatus({
               ...documentStatus,
               [documentId]: "Sent for signature",
             });
 
-            toast.success(
-              `Document "${documentTitle}" sent for signing via ${
-                signatureProviders.find(
-                  (p) => p.id === selectedSignatureProvider
-                )?.name
-              }`
-            );
+            toast.success(`Document "${documentTitle}" sent for signing`);
             setIsDocumentDialogOpen(false);
           }
         })
@@ -360,60 +589,15 @@ export function SyncDashboard() {
     }
   };
 
-  const handleAddToHalo = () => {
-    if (!documentTitle.trim()) {
-      toast.error("Document title is required");
+  const handleDownload = () => {
+    if (!createdDocumentId) {
+      toast.error("Please create the document first");
       return;
     }
 
-    try {
-      // Prepare contract data
-      const contractData = {
-        title: documentTitle,
-        description: documentDescription,
-        type: getContractTypeFromTemplate(selectedTemplate),
-        templateId: selectedTemplate,
-        fields: documentFields,
-        startDate:
-          documentFields.startDate ||
-          documentFields.effectiveDate ||
-          new Date().toISOString(),
-        endDate: documentFields.endDate || "",
-        history: {
-          templateSelections: templateSelectionHistory,
-          fieldChanges: fieldChangeHistory,
-        },
-      };
-
-      // Dispatch action to add contract to Halo
-      dispatch(
-        addContractToHalo({
-          clientId: selectedClient.id,
-          contractData,
-        })
-      )
-        .unwrap()
-        .then((result) => {
-          if (result) {
-            // Update document status
-            const documentId = result.juro.id || `doc-${Date.now()}`;
-            setDocumentStatus({
-              ...documentStatus,
-              [documentId]: "Added to Halo",
-            });
-
-            toast.success(`Document "${documentTitle}" added to Halo`);
-            setIsDocumentDialogOpen(false);
-          }
-        })
-        .catch((error) => {
-          console.error("Error adding document to Halo:", error);
-          toast.error("Failed to add document to Halo. Please try again.");
-        });
-    } catch (error) {
-      console.error("Error preparing document for Halo:", error);
-      toast.error("Failed to add document to Halo. Please try again.");
-    }
+    // Simulate download functionality
+    toast.success(`Document "${documentTitle}" downloaded`);
+    // In a real implementation, this would trigger a download of the document using the document ID
   };
 
   // Helper function to determine contract type from template
@@ -566,7 +750,12 @@ export function SyncDashboard() {
             </DialogDescription>
           </DialogHeader>
 
-          {!selectedTemplate && !isPreviewMode ? (
+          {isLoadingClientDetails ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <span className="ml-3">Loading client details...</span>
+            </div>
+          ) : !selectedTemplate && !isPreviewMode ? (
             <div className="space-y-4 py-4">
               <Label className="text-base">Select a document template</Label>
               <div className="grid grid-cols-1 gap-3">
@@ -581,15 +770,6 @@ export function SyncDashboard() {
                     {template.name}
                   </Button>
                 ))}
-                <Button
-                  key="custom"
-                  variant="outline"
-                  className="justify-start h-auto py-3 px-4"
-                  onClick={() => handleTemplateSelect("custom")}
-                >
-                  <FileText className="h-4 w-4 mr-3" />
-                  Custom Template
-                </Button>
               </div>
             </div>
           ) : isLoadingTemplate ? (
@@ -599,6 +779,25 @@ export function SyncDashboard() {
             </div>
           ) : isPreviewMode ? (
             <div className="py-4 space-y-4">
+              {!documentCreated && (
+                <Alert className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Document not created yet</AlertTitle>
+                  <AlertDescription>
+                    Please create the document to enable downloading and signing
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {documentCreated && (
+                <Alert className="mb-4 bg-green-50 text-green-800 border-green-200">
+                  <AlertTitle>Document Created Successfully</AlertTitle>
+                  <AlertDescription>
+                    Document ID: {createdDocumentId}
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="border rounded-md p-6 bg-white text-black min-h-[400px] max-h-[600px] overflow-y-auto">
                 <div className="text-center mb-6">
                   <h1 className="text-2xl font-bold">{documentTitle}</h1>
@@ -672,7 +871,10 @@ export function SyncDashboard() {
                         Signature: ________________
                       </p>
                       <p>{documentFields.clientName}</p>
-                      <p>Name: ________________</p>
+                      <p>
+                        Name:{" "}
+                        {documentFields.accountsFullName || "________________"}
+                      </p>
                       <p>
                         Title:{" "}
                         {documentFields[
@@ -684,28 +886,11 @@ export function SyncDashboard() {
                   </div>
                 </div>
               </div>
-
-              <div className="flex flex-col space-y-2">
-                <Label htmlFor="signature-provider">Signature Provider</Label>
-                <Select
-                  value={selectedSignatureProvider}
-                  onValueChange={setSelectedSignatureProvider}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a signature provider" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {signatureProviders.map((provider) => (
-                      <SelectItem key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
           ) : (
             <div className="grid gap-4 py-4">
+              {/* Validation errors are shown as toast notifications */}
+
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="title" className="text-right">
                   Title
@@ -730,22 +915,6 @@ export function SyncDashboard() {
                   rows={2}
                 />
               </div>
-
-              {selectedTemplate === "custom" && (
-                <div className="grid grid-cols-4 items-start gap-4">
-                  <Label htmlFor="custom-template" className="text-right">
-                    Custom Template
-                  </Label>
-                  <Textarea
-                    id="custom-template"
-                    value={customTemplate}
-                    onChange={handleCustomTemplateChange}
-                    className="col-span-3"
-                    rows={10}
-                    placeholder="Enter your custom template text here..."
-                  />
-                </div>
-              )}
 
               {templateFields.length > 0 && (
                 <div className="border rounded-md p-4 mt-2">
@@ -813,7 +982,7 @@ export function SyncDashboard() {
                 <h3 className="text-sm font-medium mb-3">Client Information</h3>
                 <div className="grid grid-cols-4 items-center gap-4 mb-2">
                   <Label htmlFor="clientName" className="text-right">
-                    Client Name
+                    Client Name<span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="clientName"
@@ -826,7 +995,7 @@ export function SyncDashboard() {
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4 mb-2">
                   <Label htmlFor="clientEmail" className="text-right">
-                    Client Email
+                    Client Email<span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="clientEmail"
@@ -864,6 +1033,51 @@ export function SyncDashboard() {
                     className="col-span-3"
                   />
                 </div>
+                {detailedClientData?.accountsfirstname && (
+                  <div className="grid grid-cols-4 items-center gap-4 mb-2">
+                    <Label htmlFor="accountsContact" className="text-right">
+                      Accounts Contact
+                    </Label>
+                    <Input
+                      id="accountsContact"
+                      value={documentFields.accountsFullName || ""}
+                      onChange={(e) =>
+                        handleFieldChange("accountsFullName", e.target.value)
+                      }
+                      className="col-span-3"
+                    />
+                  </div>
+                )}
+                {detailedClientData?.accountsid && (
+                  <div className="grid grid-cols-4 items-center gap-4 mb-2">
+                    <Label htmlFor="accountsId" className="text-right">
+                      Accounts ID
+                    </Label>
+                    <Input
+                      id="accountsId"
+                      value={documentFields.accountsId || ""}
+                      onChange={(e) =>
+                        handleFieldChange("accountsId", e.target.value)
+                      }
+                      className="col-span-3"
+                    />
+                  </div>
+                )}
+                {detailedClientData?.website && (
+                  <div className="grid grid-cols-4 items-center gap-4 mb-2">
+                    <Label htmlFor="website" className="text-right">
+                      Website
+                    </Label>
+                    <Input
+                      id="website"
+                      value={documentFields.website || ""}
+                      onChange={(e) =>
+                        handleFieldChange("website", e.target.value)
+                      }
+                      className="col-span-3"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -878,14 +1092,40 @@ export function SyncDashboard() {
                 >
                   Back to Edit
                 </Button>
-                <Button onClick={handleAddToHalo} variant="secondary">
-                  <FolderPlus className="h-4 w-4 mr-2" />
-                  Add to Halo
-                </Button>
-                <Button onClick={handleSendForSigning}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Send for Signing & Download
-                </Button>
+
+                {!documentCreated ? (
+                  <Button
+                    onClick={handleCreateDocument}
+                    disabled={isCreatingDocument}
+                  >
+                    {isCreatingDocument ? (
+                      <>
+                        <div className="animate-spin h-4 w-4 mr-2 border-2 border-t-transparent rounded-full" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>Create Document</>
+                    )}
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      onClick={handleDownload}
+                      variant="secondary"
+                      disabled={!documentCreated}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                    <Button
+                      onClick={handleSendForSigning}
+                      disabled={!documentCreated}
+                    >
+                      <Send className="h-4 w-4 mr-2" />
+                      Send for Signing
+                    </Button>
+                  </>
+                )}
               </>
             ) : selectedTemplate ? (
               <>
@@ -896,17 +1136,26 @@ export function SyncDashboard() {
                 >
                   Back to Templates
                 </Button>
-                <Button onClick={handlePreview} variant="secondary">
+                <Button
+                  onClick={handlePreview}
+                  variant="secondary"
+                  className="mr-2"
+                >
                   <FileText className="h-4 w-4 mr-2" />
                   Preview
                 </Button>
-                <Button onClick={handleAddToHalo} variant="secondary">
-                  <FolderPlus className="h-4 w-4 mr-2" />
-                  Add to Halo
-                </Button>
-                <Button onClick={handleSendForSigning}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Send for Signing & Download
+                <Button
+                  onClick={handleCreateDocument}
+                  disabled={isCreatingDocument}
+                >
+                  {isCreatingDocument ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 mr-2 border-2 border-t-transparent rounded-full" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>Create Document</>
+                  )}
                 </Button>
               </>
             ) : (

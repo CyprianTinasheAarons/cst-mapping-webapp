@@ -4,6 +4,11 @@ export const getHaloClients = () => {
   return httpCommon.get(`/halo`);
 };
 
+export const getHaloClientById = (clientId: number) => {
+  return httpCommon.get(`/halo/client/${clientId}`);
+};
+
+
 export const getHaloItems = (
   count: number = 300,
   search: string = "Recurring Items"
@@ -93,6 +98,7 @@ export const createHaloContract = (data: Record<string, any>) => {
 
 const HaloService = {
   getHaloClients,
+  getHaloClientById,
   getHaloItems,
   getHaloContracts,
   getHaloContractDetails,
