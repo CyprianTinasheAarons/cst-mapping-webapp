@@ -64,6 +64,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { JuroContractCreator } from "./juroContractCreator";
 
 interface TemplateField {
   title: string;
@@ -316,7 +317,7 @@ export function SyncDashboard() {
     [templateCache, dispatch, safeApiCall]
   );
 
-  // Debounced version of create document to prevent multiple rapid submissions
+  // Replace your existing debouncedCreateDocument function with this improved version
   const debouncedCreateDocument = useDebounce(() => {
     if (!validateFields()) {
       return;
@@ -324,184 +325,79 @@ export function SyncDashboard() {
 
     setIsCreatingDocument(true);
 
-    // CST's signing side UID (full UID, not truncated)
-    const CST_SIDE_UID = "079c85c7-9cad-46e1-a3f8-c68af9026f0c";
-    // Counterparty's signing side UID (full UID, not truncated)
-    const COUNTERPARTY_SIDE_UID = "f752718c-571a-42ba-8d24-ebe3442a7994";
+    try {
+      // Use the helper to create a contract with proper signing side handling
+      const requestData = JuroContractCreator.createContractPayload(
+        selectedTemplate,
+        documentTitle,
+        documentFields,
+        templateFields,
+        templateQuestions,
+        selectedClient
+      );
 
-    // Log the full template data for debugging
-    console.log("Creating contract with template data:", templateFields, templateQuestions);
-    
-    // Explicitly list fields that should NOT be included (Counterparty-only fields)
-    const counterpartyOnlyFieldUids = ["df3b7695-0a0c-4081-9e7a-b902c87ede17"]; // Title (Counterparty)
-    
-    // Extract fields from documentFields, strictly filtering by signing side
-    const fieldsArray = templateFields
-      .filter((field) => {
-        // First check if we have a value for this field
-        if (documentFields[field.uid] === undefined) return false;
-        
-        // Exclude known counterparty-only fields
-        if (counterpartyOnlyFieldUids.includes(field.uid)) {
-          console.log(`Excluding known counterparty-only field: ${field.uid} (${field.title})`);
-          return false;
-        }
-        
-        // Find question that references this field
-        const question = templateQuestions.find(q => q.fieldUid === field.uid);
-        
-        // If there's no question for this field or it has no signing side restrictions, include it
-        if (!question || !question.signingSideUids || question.signingSideUids.length === 0) {
-          return true;
-        }
-        
-        // If this field is restricted to counterparty side only, exclude it
-        if (question.signingSideUids.length === 1 && 
-            question.signingSideUids[0] === COUNTERPARTY_SIDE_UID) {
-          console.log(`Excluding counterparty-only field: ${field.uid} (${field.title}) - signing sides:`, question.signingSideUids);
-          return false;
-        }
-        
-        // If this field's signing sides includes CST, include it
-        const isForCSTSide = question.signingSideUids.includes(CST_SIDE_UID);
-        if (isForCSTSide) {
-          return true;
-        }
-        
-        // Default to excluding any field we're not sure about
-        console.log(`Excluding unclear field: ${field.uid} (${field.title}) - signing sides:`, question.signingSideUids);
-        return false;
-      })
-      .map((field) => ({
-        uid: field.uid,
-        value: documentFields[field.uid]?.toString() || "",
-      }));
+      safeApiCall(
+        "createContract",
+        () => dispatch(createJuroContract(requestData)).unwrap(),
+        (contract) => {
+          if (contract && contract.id) {
+            setCreatedDocumentId(contract.id.toString());
+            setDocumentCreated(true);
+            toast.success(`Document "${documentTitle}" created successfully`);
 
-    // Filter questions to only include those that are:
-    // 1. Required
-    // 2. For our signing side (CST) OR without any signing side restrictions
-    const answersArray = templateQuestions
-      .filter((q) => {
-        // Skip questions with fieldUid as they're handled in fieldsArray
-        if (q.fieldUid) return false;
-
-        // Include required questions that either:
-        // - Have no signing side restrictions (empty signingSideUids array), OR
-        // - Have signingSideUids but it includes our side (CST)
-        const validForCSTSide = (
-          q.isRequired &&
-          (!q.signingSideUids ||
-            q.signingSideUids.length === 0 ||
-            q.signingSideUids.includes(CST_SIDE_UID))
-        );
-        
-        if (!validForCSTSide) {
-          console.log(`Excluding question not for CST side: ${q.uid} (${q.title}) - signing sides:`, q.signingSideUids);
-        }
-        
-        return validForCSTSide;
-      })
-      .map((question) => {
-        // Handle special questions like counterparty_legal_name
-        if (question.uid === "counterparty_legal_name") {
-          return {
-            uid: question.uid,
-            value: selectedClient?.name || "",
-          };
-        } else if (question.uid === "signatory_name") {
-          return {
-            uid: question.uid,
-            value: documentFields.signatory_name || "Shane Thorne",
-          };
-        } else if (question.uid === "signatory_email") {
-          return {
-            uid: question.uid,
-            value: documentFields.signatory_email || "s.thorne@cst.co.uk",
-          };
-        }
-        // Handle other questions
-        else if (documentFields[question.uid]) {
-          return {
-            uid: question.uid,
-            value: documentFields[question.uid],
-          };
-        }
-
-        console.warn(
-          `Required answer for question UID ${question.uid} (${question.title}) is missing.`
-        );
-        return null;
-      })
-      .filter(Boolean);
-
-    const requestData = {
-      templateId: selectedTemplate,
-      contract: {
-        answers: answersArray,
-        fields: fieldsArray,
-        owner: {
-          name: "Shane Thorne",
-          username: "s.thorne@cst.co.uk",
+            // Refresh contracts list with a delay to avoid rate limiting
+            setTimeout(() => {
+              dispatch(fetchHaloContracts());
+            }, 2000);
+          }
+          setIsCreatingDocument(false);
         },
-        name: documentTitle,
-      },
-    };
+        (error) => {
+          console.error("Error creating document:", error);
 
-    console.log("Creating contract with payload:", JSON.stringify(requestData, null, 2));
-    
-    safeApiCall(
-      "createContract",
-      () => dispatch(createJuroContract(requestData)).unwrap(),
-      (contract) => {
-        if (contract && contract.id) {
-          setCreatedDocumentId(contract.id.toString());
-          setDocumentCreated(true);
-          toast.success(`Document "${documentTitle}" created successfully`);
+          // Provide helpful error feedback
+          if (error.response && error.response.data) {
+            const errorMessage =
+              error.response.data.detail ||
+              error.response.data.message ||
+              "Unknown error";
 
-          const newContract = {
-            id: contract.id,
-            name: documentTitle,
-            client_id: selectedClient?.id,
-            status: "Draft",
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
+            // Display the main error
+            toast.error(`Failed to create document: ${errorMessage}`);
 
-          // Refresh contracts list but with a delay to avoid rate limiting
-          setTimeout(() => {
-            dispatch(fetchHaloContracts());
-          }, 2000);
-        }
-        setIsCreatingDocument(false);
-      },
-      (error) => {
-        console.error("Error creating document:", error);
+            // If it's a signing side error, provide more context
+            if (errorMessage.includes("Invalid question signing side")) {
+              toast.info(
+                "This is a signing side issue - only send answers for your organization's questions"
+              );
+            }
 
-        if (error.response && error.response.data) {
-          const errorMessage =
-            error.response.data.detail ||
-            error.response.data.message ||
-            "Unknown error";
-          toast.error(`Failed to create document: ${errorMessage}`);
-
-          if (error.response.data.errors) {
-            Object.entries(error.response.data.errors).forEach(
-              ([field, message]) => {
-                toast.error(`${field}: ${message}`);
-              }
+            // Display any additional errors
+            if (error.response.data.errors) {
+              Object.entries(error.response.data.errors).forEach(
+                ([field, message]) => {
+                  toast.error(`${field}: ${message}`);
+                }
+              );
+            }
+          } else {
+            toast.error(
+              `Failed to create document: ${error.message || "Unknown error"}`
             );
           }
-        } else {
-          toast.error(
-            `Failed to create document: ${error.message || "Unknown error"}`
-          );
+          setIsCreatingDocument(false);
         }
-        setIsCreatingDocument(false);
-      }
-    );
+      );
+    } catch (error: any) {
+      console.error("Error preparing contract data:", error);
+      toast.error(
+        `Error preparing contract: ${error.message || "Unknown error"}`
+      );
+      setIsCreatingDocument(false);
+    }
   }, 500);
 
-  // Debounced version of send for signing
+  // Also update the send for signing function
   const debouncedSendForSigning = useDebounce(() => {
     if (!createdDocumentId) {
       toast.error("Please create the document first");
@@ -509,80 +405,31 @@ export function SyncDashboard() {
     }
 
     try {
-      // Find the counterparty email field in template fields
-      const counterpartyEmailField = templateFields.find(
-        (f) => f.uid === "2fff3269-19c6-4d02-9c78-d04156991bfb"
+      // Use the helper to create a signing request
+      const signingData = JuroContractCreator.createSigningRequest(
+        documentFields,
+        templateFields,
+        selectedClient,
+        detailedClientData,
+        selectedSignatureProvider
       );
 
-      // Find the counterparty name field in template fields
-      const counterpartyNameField = templateFields.find(
-        (f) => f.uid === "a50f21ec-0dd8-47dc-950b-15032103c63b"
-      );
-
-      // Find the counterparty contact name field
-      const counterpartyContactField = templateFields.find(
-        (f) => f.uid === "73aa33aa-7469-41a4-9fff-76bb84a88fdd"
-      );
-
-      // Try to get email from document fields or client data
-      const clientEmail =
-        // First try the counterparty email field if it exists
-        (counterpartyEmailField &&
-          documentFields[counterpartyEmailField.uid]) ||
-        // Then try the signatory email if it exists in document fields
-        documentFields.counterparty_email ||
-        // Then try client data
-        (selectedClient &&
-          (selectedClient.email ||
-            selectedClient.accountsemailaddress ||
-            detailedClientData?.accountsemailaddress)) ||
-        "";
-
-      if (!clientEmail) {
+      // Check that we have an email and name
+      if (!signingData.recipients[0].email) {
         toast.error(
           "No client email address found. Please provide an email address for signing."
         );
         return;
       }
 
-      // Try to get client name from document fields or client data
-      const clientName =
-        // First try the counterparty name field if it exists
-        (counterpartyNameField && documentFields[counterpartyNameField.uid]) ||
-        // Then try the counterparty contact name field
-        (counterpartyContactField &&
-          documentFields[counterpartyContactField.uid]) ||
-        // Then try counterparty_legal_name
-        documentFields.counterparty_legal_name ||
-        // Then try client data
-        selectedClient?.name ||
-        "";
-
-      if (!clientName) {
+      if (!signingData.recipients[0].name) {
         toast.error(
           "No client name found. Please provide a name for the signatory."
         );
         return;
       }
 
-      // Log signing details for debugging
-      console.log("Sending for signing with:", {
-        clientName,
-        clientEmail,
-        provider: selectedSignatureProvider,
-      });
-
-      const signingData = {
-        provider: selectedSignatureProvider,
-        recipients: [
-          {
-            email: clientEmail,
-            name: clientName,
-            role: "Signatory",
-          },
-        ],
-      };
-
+      // Log signing details
       console.log("Sending contract for signing:", signingData);
 
       safeApiCall(
@@ -604,7 +451,7 @@ export function SyncDashboard() {
             });
 
             toast.success(
-              `Document "${documentTitle}" sent for signing to ${clientEmail}`
+              `Document "${documentTitle}" sent for signing to ${signingData.recipients[0].email}`
             );
             setIsDocumentDialogOpen(false);
 
@@ -1030,7 +877,9 @@ export function SyncDashboard() {
         const isOurQuestion =
           !question.signingSideUids ||
           question.signingSideUids.length === 0 ||
-          question.signingSideUids.includes("079c85c7-9cad-46e1-a3f8-c68af9026f0c"); // CST side UID
+          question.signingSideUids.includes(
+            "079c85c7-9cad-46e1-a3f8-c68af9026f0c"
+          ); // CST side UID
 
         if (!isOurQuestion) {
           return; // Skip validation for questions not on our side
