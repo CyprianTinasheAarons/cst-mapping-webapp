@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -40,6 +40,7 @@ import {
   fetchJuroTemplate,
   createJuroContract,
   sendContractForSigning,
+  downloadContractPdf,
 } from "../../slices/juro/juroSlice";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -80,6 +81,24 @@ interface TemplateQuestion {
   uid: string;
 }
 
+// Add a utility for debouncing
+const useDebounce = (fn: Function, delay: number) => {
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  return useCallback(
+    (...args: any[]) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      timeoutRef.current = setTimeout(() => {
+        fn(...args);
+      }, delay);
+    },
+    [fn, delay]
+  );
+};
+
 export function SyncDashboard() {
   const [clientSearch, setClientSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -98,6 +117,9 @@ export function SyncDashboard() {
   const [templateFields, setTemplateFields] = useState<TemplateField[]>([]);
   const [templateQuestions, setTemplateQuestions] = useState<
     TemplateQuestion[]
+  >([]);
+  const [templateAnswers, setTemplateAnswers] = useState<
+    Array<{ uid: string; value: string }>
   >([]);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [selectedSignatureProvider, setSelectedSignatureProvider] =
@@ -121,6 +143,20 @@ export function SyncDashboard() {
   );
   const [documentCreated, setDocumentCreated] = useState(false);
 
+  // Add caching and rate limit states
+  const [templateCache, setTemplateCache] = useState<Record<string, any>>({});
+  const [isRateLimited, setIsRateLimited] = useState(false);
+  const [rateLimitResetTime, setRateLimitResetTime] = useState<Date | null>(
+    null
+  );
+  const [apiCallsInProgress, setApiCallsInProgress] = useState<
+    Record<string, boolean>
+  >({});
+  const lastApiCallTimestamps = useRef<Record<string, number>>({});
+
+  // Minimum time between API calls (in ms)
+  const API_CALL_COOLDOWN = 500;
+
   const dispatch = useAppDispatch();
 
   const {
@@ -136,29 +172,497 @@ export function SyncDashboard() {
     currentTemplate,
   } = useAppSelector((state) => state.juro);
 
+  // Function to safely make API calls with rate limiting protection
+  const safeApiCall = useCallback(
+    async (
+      callName: string,
+      apiFunction: () => Promise<any>,
+      onSuccess: (data: any) => void,
+      onError: (error: any) => void
+    ) => {
+      // Check if we're currently rate limited
+      if (isRateLimited) {
+        const now = new Date();
+        if (rateLimitResetTime && now < rateLimitResetTime) {
+          const secondsToWait = Math.ceil(
+            (rateLimitResetTime.getTime() - now.getTime()) / 1000
+          );
+          toast.warning(
+            `API rate limit reached. Please wait ${secondsToWait} seconds before trying again.`
+          );
+          return;
+        } else {
+          setIsRateLimited(false);
+        }
+      }
+
+      // Check if this specific API call is already in progress
+      if (apiCallsInProgress[callName]) {
+        console.log(
+          `API call "${callName}" already in progress, skipping duplicate call`
+        );
+        return;
+      }
+
+      // Check if we need to wait before making another API call
+      const now = Date.now();
+      const lastCallTime = lastApiCallTimestamps.current[callName] || 0;
+      const timeSinceLastCall = now - lastCallTime;
+
+      if (timeSinceLastCall < API_CALL_COOLDOWN) {
+        console.log(
+          `Throttling API call "${callName}" - too soon after last call`
+        );
+        setTimeout(() => {
+          safeApiCall(callName, apiFunction, onSuccess, onError);
+        }, API_CALL_COOLDOWN - timeSinceLastCall);
+        return;
+      }
+
+      // Mark this API call as in progress
+      setApiCallsInProgress((prev) => ({ ...prev, [callName]: true }));
+      lastApiCallTimestamps.current[callName] = now;
+
+      try {
+        const response = await apiFunction();
+        onSuccess(response);
+      } catch (error: any) {
+        // Check if this is a rate limit error (status 429)
+        if (error.response && error.response.status === 429) {
+          // Get the reset time from headers if available
+          const resetTimeHeader =
+            error.response.headers["x-rate-limit-reset"] ||
+            error.response.headers["Retry-After"];
+
+          if (resetTimeHeader) {
+            const resetTime = new Date();
+            resetTime.setSeconds(
+              resetTime.getSeconds() + parseInt(resetTimeHeader)
+            );
+            setRateLimitResetTime(resetTime);
+          } else {
+            // Default to 60 seconds if no header provided
+            const resetTime = new Date();
+            resetTime.setSeconds(resetTime.getSeconds() + 60);
+            setRateLimitResetTime(resetTime);
+          }
+
+          setIsRateLimited(true);
+          toast.error("API rate limit exceeded. Please try again later.");
+        } else {
+          onError(error);
+        }
+      } finally {
+        setApiCallsInProgress((prev) => ({ ...prev, [callName]: false }));
+      }
+    },
+    [isRateLimited, rateLimitResetTime, apiCallsInProgress]
+  );
+
+  // Load templates with caching
+  const loadTemplates = useCallback(() => {
+    safeApiCall(
+      "fetchTemplates",
+      () => dispatch(fetchJuroTemplates()).unwrap(),
+      (templates) => {
+        if (templates.length > 0) {
+          console.log(`Loaded ${templates.length} templates from Juro API`);
+        } else {
+          toast.warning(
+            "No templates available. Please create templates in Juro first."
+          );
+        }
+      },
+      (error) => {
+        console.error("Failed to load templates:", error);
+        toast.error(
+          "Failed to connect to Juro API. Please check your connection."
+        );
+      }
+    );
+  }, [safeApiCall, dispatch]);
+
+  // Load template details with caching
+  const loadTemplateDetails = useCallback(
+    (templateId: string) => {
+      // Check if the template is already in the cache
+      if (templateCache[templateId]) {
+        console.log(`Using cached template: ${templateId}`);
+        processTemplateDetails(templateCache[templateId]);
+        setIsLoadingTemplate(false);
+        return;
+      }
+
+      setIsLoadingTemplate(true);
+
+      safeApiCall(
+        `fetchTemplate_${templateId}`,
+        () => dispatch(fetchJuroTemplate(templateId)).unwrap(),
+        (template) => {
+          // Cache the template for future use
+          setTemplateCache((prev) => ({
+            ...prev,
+            [templateId]: template,
+          }));
+          setIsLoadingTemplate(false);
+        },
+        (error) => {
+          console.error(`Error loading template ${templateId}:`, error);
+          toast.error("Failed to load template details.");
+          setIsLoadingTemplate(false);
+        }
+      );
+    },
+    [templateCache, dispatch, safeApiCall]
+  );
+
+  // Debounced version of create document to prevent multiple rapid submissions
+  const debouncedCreateDocument = useDebounce(() => {
+    if (!validateFields()) {
+      return;
+    }
+
+    setIsCreatingDocument(true);
+
+    // CST's signing side UID (full UID, not truncated)
+    const CST_SIDE_UID = "079c85c7-9cad-46e1-a3f8-c68af9026f0c";
+    // Counterparty's signing side UID (full UID, not truncated)
+    const COUNTERPARTY_SIDE_UID = "f752718c-571a-42ba-8d24-ebe3442a7994";
+
+    // Log the full template data for debugging
+    console.log("Creating contract with template data:", templateFields, templateQuestions);
+    
+    // Explicitly list fields that should NOT be included (Counterparty-only fields)
+    const counterpartyOnlyFieldUids = ["df3b7695-0a0c-4081-9e7a-b902c87ede17"]; // Title (Counterparty)
+    
+    // Extract fields from documentFields, strictly filtering by signing side
+    const fieldsArray = templateFields
+      .filter((field) => {
+        // First check if we have a value for this field
+        if (documentFields[field.uid] === undefined) return false;
+        
+        // Exclude known counterparty-only fields
+        if (counterpartyOnlyFieldUids.includes(field.uid)) {
+          console.log(`Excluding known counterparty-only field: ${field.uid} (${field.title})`);
+          return false;
+        }
+        
+        // Find question that references this field
+        const question = templateQuestions.find(q => q.fieldUid === field.uid);
+        
+        // If there's no question for this field or it has no signing side restrictions, include it
+        if (!question || !question.signingSideUids || question.signingSideUids.length === 0) {
+          return true;
+        }
+        
+        // If this field is restricted to counterparty side only, exclude it
+        if (question.signingSideUids.length === 1 && 
+            question.signingSideUids[0] === COUNTERPARTY_SIDE_UID) {
+          console.log(`Excluding counterparty-only field: ${field.uid} (${field.title}) - signing sides:`, question.signingSideUids);
+          return false;
+        }
+        
+        // If this field's signing sides includes CST, include it
+        const isForCSTSide = question.signingSideUids.includes(CST_SIDE_UID);
+        if (isForCSTSide) {
+          return true;
+        }
+        
+        // Default to excluding any field we're not sure about
+        console.log(`Excluding unclear field: ${field.uid} (${field.title}) - signing sides:`, question.signingSideUids);
+        return false;
+      })
+      .map((field) => ({
+        uid: field.uid,
+        value: documentFields[field.uid]?.toString() || "",
+      }));
+
+    // Filter questions to only include those that are:
+    // 1. Required
+    // 2. For our signing side (CST) OR without any signing side restrictions
+    const answersArray = templateQuestions
+      .filter((q) => {
+        // Skip questions with fieldUid as they're handled in fieldsArray
+        if (q.fieldUid) return false;
+
+        // Include required questions that either:
+        // - Have no signing side restrictions (empty signingSideUids array), OR
+        // - Have signingSideUids but it includes our side (CST)
+        const validForCSTSide = (
+          q.isRequired &&
+          (!q.signingSideUids ||
+            q.signingSideUids.length === 0 ||
+            q.signingSideUids.includes(CST_SIDE_UID))
+        );
+        
+        if (!validForCSTSide) {
+          console.log(`Excluding question not for CST side: ${q.uid} (${q.title}) - signing sides:`, q.signingSideUids);
+        }
+        
+        return validForCSTSide;
+      })
+      .map((question) => {
+        // Handle special questions like counterparty_legal_name
+        if (question.uid === "counterparty_legal_name") {
+          return {
+            uid: question.uid,
+            value: selectedClient?.name || "",
+          };
+        } else if (question.uid === "signatory_name") {
+          return {
+            uid: question.uid,
+            value: documentFields.signatory_name || "Shane Thorne",
+          };
+        } else if (question.uid === "signatory_email") {
+          return {
+            uid: question.uid,
+            value: documentFields.signatory_email || "s.thorne@cst.co.uk",
+          };
+        }
+        // Handle other questions
+        else if (documentFields[question.uid]) {
+          return {
+            uid: question.uid,
+            value: documentFields[question.uid],
+          };
+        }
+
+        console.warn(
+          `Required answer for question UID ${question.uid} (${question.title}) is missing.`
+        );
+        return null;
+      })
+      .filter(Boolean);
+
+    const requestData = {
+      templateId: selectedTemplate,
+      contract: {
+        answers: answersArray,
+        fields: fieldsArray,
+        owner: {
+          name: "Shane Thorne",
+          username: "s.thorne@cst.co.uk",
+        },
+        name: documentTitle,
+      },
+    };
+
+    console.log("Creating contract with payload:", JSON.stringify(requestData, null, 2));
+    
+    safeApiCall(
+      "createContract",
+      () => dispatch(createJuroContract(requestData)).unwrap(),
+      (contract) => {
+        if (contract && contract.id) {
+          setCreatedDocumentId(contract.id.toString());
+          setDocumentCreated(true);
+          toast.success(`Document "${documentTitle}" created successfully`);
+
+          const newContract = {
+            id: contract.id,
+            name: documentTitle,
+            client_id: selectedClient?.id,
+            status: "Draft",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          // Refresh contracts list but with a delay to avoid rate limiting
+          setTimeout(() => {
+            dispatch(fetchHaloContracts());
+          }, 2000);
+        }
+        setIsCreatingDocument(false);
+      },
+      (error) => {
+        console.error("Error creating document:", error);
+
+        if (error.response && error.response.data) {
+          const errorMessage =
+            error.response.data.detail ||
+            error.response.data.message ||
+            "Unknown error";
+          toast.error(`Failed to create document: ${errorMessage}`);
+
+          if (error.response.data.errors) {
+            Object.entries(error.response.data.errors).forEach(
+              ([field, message]) => {
+                toast.error(`${field}: ${message}`);
+              }
+            );
+          }
+        } else {
+          toast.error(
+            `Failed to create document: ${error.message || "Unknown error"}`
+          );
+        }
+        setIsCreatingDocument(false);
+      }
+    );
+  }, 500);
+
+  // Debounced version of send for signing
+  const debouncedSendForSigning = useDebounce(() => {
+    if (!createdDocumentId) {
+      toast.error("Please create the document first");
+      return;
+    }
+
+    try {
+      // Find the counterparty email field in template fields
+      const counterpartyEmailField = templateFields.find(
+        (f) => f.uid === "2fff3269-19c6-4d02-9c78-d04156991bfb"
+      );
+
+      // Find the counterparty name field in template fields
+      const counterpartyNameField = templateFields.find(
+        (f) => f.uid === "a50f21ec-0dd8-47dc-950b-15032103c63b"
+      );
+
+      // Find the counterparty contact name field
+      const counterpartyContactField = templateFields.find(
+        (f) => f.uid === "73aa33aa-7469-41a4-9fff-76bb84a88fdd"
+      );
+
+      // Try to get email from document fields or client data
+      const clientEmail =
+        // First try the counterparty email field if it exists
+        (counterpartyEmailField &&
+          documentFields[counterpartyEmailField.uid]) ||
+        // Then try the signatory email if it exists in document fields
+        documentFields.counterparty_email ||
+        // Then try client data
+        (selectedClient &&
+          (selectedClient.email ||
+            selectedClient.accountsemailaddress ||
+            detailedClientData?.accountsemailaddress)) ||
+        "";
+
+      if (!clientEmail) {
+        toast.error(
+          "No client email address found. Please provide an email address for signing."
+        );
+        return;
+      }
+
+      // Try to get client name from document fields or client data
+      const clientName =
+        // First try the counterparty name field if it exists
+        (counterpartyNameField && documentFields[counterpartyNameField.uid]) ||
+        // Then try the counterparty contact name field
+        (counterpartyContactField &&
+          documentFields[counterpartyContactField.uid]) ||
+        // Then try counterparty_legal_name
+        documentFields.counterparty_legal_name ||
+        // Then try client data
+        selectedClient?.name ||
+        "";
+
+      if (!clientName) {
+        toast.error(
+          "No client name found. Please provide a name for the signatory."
+        );
+        return;
+      }
+
+      // Log signing details for debugging
+      console.log("Sending for signing with:", {
+        clientName,
+        clientEmail,
+        provider: selectedSignatureProvider,
+      });
+
+      const signingData = {
+        provider: selectedSignatureProvider,
+        recipients: [
+          {
+            email: clientEmail,
+            name: clientName,
+            role: "Signatory",
+          },
+        ],
+      };
+
+      console.log("Sending contract for signing:", signingData);
+
+      safeApiCall(
+        `sendForSigning_${createdDocumentId}`,
+        () =>
+          dispatch(
+            sendContractForSigning({
+              contractId: createdDocumentId,
+              signingUid: "primary",
+              data: signingData,
+            })
+          ).unwrap(),
+        (signingResult) => {
+          if (signingResult) {
+            const documentId = signingResult.id || createdDocumentId;
+            setDocumentStatus({
+              ...documentStatus,
+              [documentId]: "Sent for signature",
+            });
+
+            toast.success(
+              `Document "${documentTitle}" sent for signing to ${clientEmail}`
+            );
+            setIsDocumentDialogOpen(false);
+
+            // Refresh contract list with delay
+            setTimeout(() => {
+              dispatch(fetchHaloContracts());
+            }, 2000);
+          }
+        },
+        (error) => {
+          console.error("Error sending document for signing:", error);
+
+          if (error.response && error.response.data) {
+            const errorMessage =
+              error.response.data.detail ||
+              error.response.data.message ||
+              "Unknown error";
+            toast.error(`Failed to send document for signing: ${errorMessage}`);
+          } else {
+            toast.error(
+              `Failed to send document for signing: ${
+                error.message || "Unknown error"
+              }`
+            );
+          }
+        }
+      );
+    } catch (error: any) {
+      console.error("Error preparing document for signing:", error);
+      toast.error(
+        `Failed to send document: ${error.message || "Please try again."}`
+      );
+    }
+  }, 500);
+
+  // Use the loadTemplates function in the useEffect
   useEffect(() => {
     if (haloStatus === "idle") {
       dispatch(fetchHaloClients());
       dispatch(fetchHaloContracts());
-      dispatch(fetchJuroTemplates());
+      loadTemplates();
     }
-  }, [haloStatus, dispatch]);
+  }, [haloStatus, dispatch, loadTemplates]);
 
-  // Handle when template details are fetched
+  // Handle when template details are fetched - keep the caching logic
   useEffect(() => {
     if (currentTemplate && selectedTemplate && detailedClientData) {
       processTemplateDetails(currentTemplate);
+
+      // Cache the template
+      setTemplateCache((prev) => ({
+        ...prev,
+        [selectedTemplate]: currentTemplate,
+      }));
+
       setIsLoadingTemplate(false);
     }
-  }, [currentTemplate, detailedClientData]);
-
-  // Handle when detailed client data is fetched
-  useEffect(() => {
-    if (detailedClientData && selectedTemplate && currentTemplate) {
-      processTemplateDetails(currentTemplate);
-      setIsLoadingClientDetails(false);
-    }
-  }, [detailedClientData, selectedTemplate, currentTemplate]);
+  }, [currentTemplate, detailedClientData, selectedTemplate]);
 
   // Reset loading states if the status changes to success or failure
   useEffect(() => {
@@ -175,7 +679,19 @@ export function SyncDashboard() {
   }, [juroStatus]);
 
   const processTemplateDetails = (template: any) => {
-    if (!template || !template.fields) return;
+    if (!template || !template.fields) {
+      toast.error("Template data is invalid or incomplete");
+      return;
+    }
+
+    // Check template version compatibility
+    if (template.version && parseInt(template.version) > 2) {
+      toast.warning(
+        `Template version ${template.version} may have features not fully supported by this application.`
+      );
+    }
+
+    console.log("Processing template:", template.name);
 
     // Set template fields
     setTemplateFields(template.fields || []);
@@ -184,133 +700,157 @@ export function SyncDashboard() {
     // Create initial document fields based on template fields and client data
     const initialFields: Record<string, string> = {};
 
-    // Add client data with more detailed information if available
+    // First, log the structure of the template questions and fields for debugging
+    console.log("Template questions:", template.questions);
+    console.log("Template fields:", template.fields);
+
+    // Add special fields required by Juro
+    initialFields.signatory_name = "Shane Thorne";
+    initialFields.signatory_email = "s.thorne@cst.co.uk";
+
+    // Handle counterparty_legal_name if it exists in template questions
     if (selectedClient) {
-      const clientData = detailedClientData || selectedClient;
+      const counterpartyLegalNameQuestion = template.questions.find(
+        (q: TemplateQuestion) => q.uid === "counterparty_legal_name"
+      );
 
-      // Basic client info
-      initialFields.clientName = clientData.name || "";
-      initialFields.clientId = clientData.id?.toString() || "";
-
-      // Contact details
-      initialFields.clientEmail =
-        clientData.accountsemailaddress || clientData.email || "";
-      initialFields.clientPhone =
-        clientData.main_phonenumber || clientData.phone || "";
-
-      // Address information from main_invoice_address if available
-      if (clientData.main_invoice_address) {
-        const address = clientData.main_invoice_address;
-        initialFields.clientAddress = [
-          address.line1,
-          address.line2,
-          address.line3,
-          address.line4,
-          address.postcode,
-        ]
-          .filter(Boolean)
-          .join(", ");
-      } else {
-        initialFields.clientAddress = clientData.address || "";
+      if (counterpartyLegalNameQuestion) {
+        initialFields.counterparty_legal_name = selectedClient.name;
       }
-
-      // Additional contact person details
-      initialFields.accountsFirstName = clientData.accountsfirstname || "";
-      initialFields.accountsLastName = clientData.accountslastname || "";
-      initialFields.accountsFullName =
-        clientData.accountsfirstname && clientData.accountslastname
-          ? `${clientData.accountsfirstname} ${clientData.accountslastname}`
-          : "";
-
-      // Business details
-      initialFields.tradingName =
-        clientData.trading_name || clientData.name || "";
-      initialFields.accountsId = clientData.accountsid || "";
-      initialFields.website = clientData.website || "";
-      initialFields.domain = clientData.domain || "";
     }
 
-    // Add company data
-    initialFields.companyName = "CST LTD";
-    initialFields.companyAddress = "CST LTD, Maidenhead, UK";
-    initialFields.companyEmail = "info@cstltd.com";
-    initialFields.companyPhone = "01628 531400";
-    initialFields.date = new Date().toISOString().split("T")[0];
-    initialFields.effectiveDate = new Date().toISOString().split("T")[0];
-
-    // Add template-specific fields with default values if available
-    template.fields.forEach((field: TemplateField) => {
-      initialFields[field.uid] = field.value || "";
-    });
-
-    // Map known fields to more user-friendly names
-    // Main counterparty name field
-    const counterpartyField = template.fields.find(
-      (f: TemplateField) => f.uid === "a50f21ec-0dd8-47dc-950b-15032103c63b"
-    );
-    if (counterpartyField) {
-      initialFields[counterpartyField.uid] = selectedClient?.name || "";
-    }
-
-    // Map counterparty contact fields based on field titles
+    // Map client data to template fields using the correct UIDs
     if (selectedClient && template.fields) {
       const clientData = detailedClientData || selectedClient;
 
-      // Iterate through template fields to find and map counterparty fields
+      // Look for specific field UIDs from the template
       template.fields.forEach((field: TemplateField) => {
-        const fieldTitle = field.title?.toLowerCase() || "";
+        // Handle known field UIDs based on the comparison table
+        switch (field.uid) {
+          // Term field
+          case "6128253a-93dc-4d83-b972-bb9497513843":
+            initialFields[field.uid] = field.value || "12-Month";
+            break;
 
-        // Map Counterparty Contact Name
-        if (
-          fieldTitle.includes("counterparty contact name") ||
-          fieldTitle.includes("counterparty contact")
-        ) {
-          initialFields[field.uid] =
-            clientData.accountsfirstname && clientData.accountslastname
-              ? `${clientData.accountsfirstname} ${clientData.accountslastname}`
-              : clientData.main_contact_name || "";
-        }
+          // Counterparty Contact Name
+          case "73aa33aa-7469-41a4-9fff-76bb84a88fdd":
+            initialFields[field.uid] =
+              clientData.accountsfirstname && clientData.accountslastname
+                ? `${clientData.accountsfirstname} ${clientData.accountslastname}`
+                : clientData.main_contact_name || "";
+            break;
 
-        // Map Counterparty Address
-        if (fieldTitle.includes("counterparty address")) {
-          if (clientData.main_invoice_address) {
-            const address = clientData.main_invoice_address;
-            initialFields[field.uid] = [
-              address.line1,
-              address.line2,
-              address.line3,
-              address.line4,
-              address.postcode,
-            ]
-              .filter(Boolean)
-              .join(", ");
-          } else {
-            initialFields[field.uid] = clientData.address || "";
-          }
-        }
+          // Counterparty Address
+          case "2b82a989-7eee-4783-a544-2acec331cc84":
+            if (clientData.main_invoice_address) {
+              const address = clientData.main_invoice_address;
+              initialFields[field.uid] = [
+                address.line1,
+                address.line2,
+                address.line3,
+                address.line4,
+                address.postcode,
+              ]
+                .filter(Boolean)
+                .join(", ");
+            } else {
+              initialFields[field.uid] = clientData.address || "";
+            }
+            break;
 
-        // Map Counterparty Email
-        if (
-          fieldTitle.includes("counterparty email") ||
-          fieldTitle.includes("counterparty contact email")
-        ) {
-          initialFields[field.uid] =
-            clientData.accountsemailaddress ||
-            clientData.main_contact_email ||
-            clientData.email ||
-            "";
-        }
+          // Counterparty Contact Email
+          case "2fff3269-19c6-4d02-9c78-d04156991bfb":
+            initialFields[field.uid] =
+              clientData.accountsemailaddress ||
+              clientData.main_contact_email ||
+              clientData.email ||
+              "";
+            break;
 
-        // Map Counterparty Phone
-        if (
-          fieldTitle.includes("counterparty phone") ||
-          fieldTitle.includes("counterparty contact phone")
-        ) {
-          initialFields[field.uid] =
-            clientData.main_phonenumber ||
-            clientData.main_contact_phonenumber ||
-            clientData.phone ||
-            "";
+          // Contract Reason
+          case "8de7e9ec-14dd-43cd-9367-7049c5f72a70":
+            initialFields[field.uid] = ""; // Leave empty or set default
+            break;
+
+          // Effective Date
+          case "6e338014-47de-42c7-a816-88935e1b9d0c":
+            initialFields[field.uid] = new Date().toISOString().split("T")[0];
+            break;
+
+          // Quote Number
+          case "9cea8342-725c-42c7-b50f-4ceb3425230a":
+            initialFields[field.uid] = "";
+            break;
+
+          // Delivery Date
+          case "4a46d105-0072-4a3f-9aa5-8bf7daa56cc6":
+            initialFields[field.uid] = new Date().toISOString().split("T")[0];
+            break;
+
+          // Expiration Date
+          case "af79c1b8-d4af-4bd3-80aa-c7103058a965":
+            const expirationDate = new Date();
+            expirationDate.setMonth(expirationDate.getMonth() + 1);
+            initialFields[field.uid] = expirationDate
+              .toISOString()
+              .split("T")[0];
+            break;
+
+          // Title (CST)
+          case "afd7cc85-834f-4fd0-8e93-37d32f6f9afd":
+            initialFields[field.uid] = "Account Director";
+            break;
+
+          // Title (Counterparty)
+          case "df3b7695-0a0c-4081-9e7a-b902c87ede17":
+            initialFields[field.uid] = clientData.accountstitle || "";
+            break;
+
+          // Counterparty (Company)
+          case "a50f21ec-0dd8-47dc-950b-15032103c63b":
+            initialFields[field.uid] = clientData.name || "";
+            break;
+
+          default:
+            // For any other template fields, use default values if available
+            if (field.value) {
+              initialFields[field.uid] = field.value;
+            }
+
+            // Try to intelligently map fields based on titles
+            const fieldTitle = field.title?.toLowerCase() || "";
+            if (
+              fieldTitle.includes("counterparty") ||
+              fieldTitle.includes("client")
+            ) {
+              if (
+                fieldTitle.includes("name") ||
+                fieldTitle.includes("company")
+              ) {
+                initialFields[field.uid] = clientData.name || "";
+              } else if (fieldTitle.includes("address")) {
+                if (clientData.main_invoice_address) {
+                  const address = clientData.main_invoice_address;
+                  initialFields[field.uid] = [
+                    address.line1,
+                    address.line2,
+                    address.line3,
+                    address.line4,
+                    address.postcode,
+                  ]
+                    .filter(Boolean)
+                    .join(", ");
+                } else {
+                  initialFields[field.uid] = clientData.address || "";
+                }
+              } else if (fieldTitle.includes("email")) {
+                initialFields[field.uid] =
+                  clientData.accountsemailaddress || clientData.email || "";
+              } else if (fieldTitle.includes("phone")) {
+                initialFields[field.uid] =
+                  clientData.main_phonenumber || clientData.phone || "";
+              }
+            }
         }
       });
     }
@@ -320,6 +860,8 @@ export function SyncDashboard() {
 
     // Update document fields
     setDocumentFields(initialFields);
+
+    console.log("Initialized document fields:", initialFields);
   };
 
   const filteredClients = haloClients
@@ -371,15 +913,20 @@ export function SyncDashboard() {
     setSelectedTemplate(templateId);
     setIsPreviewMode(false);
     setTemplateSelectionHistory([...templateSelectionHistory, templateId]);
-    // Reset document creation state
     setDocumentCreated(false);
     setCreatedDocumentId(null);
     setValidationErrors([]);
 
-    // Fetch template details if not a custom template
     if (templateId !== "custom") {
+      // Use cached template if available, otherwise fetch
+      if (templateCache[templateId]) {
+        console.log(`Using cached template: ${templateId}`);
+        processTemplateDetails(templateCache[templateId]);
+        return;
+      }
+
       setIsLoadingTemplate(true);
-      dispatch(fetchJuroTemplate(templateId));
+      loadTemplateDetails(templateId);
     } else {
       // Handle custom template
       const autoFields: Record<string, string> = {
@@ -443,41 +990,70 @@ export function SyncDashboard() {
   const validateFields = () => {
     const errors: string[] = [];
 
-    // Only validate document title
+    // Validate document title
     if (!documentTitle.trim()) {
       errors.push("Document title is required");
     }
 
-    // Validate required template fields, but skip any client-related ones
+    // Validate special questions that don't have field mappings
     templateQuestions.forEach((question) => {
-      if (question.isRequired && !documentFields[question.fieldUid]?.trim()) {
-        const fieldTitle =
-          templateFields.find((f) => f.uid === question.fieldUid)?.title ||
-          question.title;
+      if (question.isRequired && !question.fieldUid) {
+        // Skip validation for signatory fields as they have defaults
+        if (["signatory_name", "signatory_email"].includes(question.uid)) {
+          return;
+        }
 
-        // Skip validation for any client-related fields
-        const fieldTitleLower = fieldTitle.toLowerCase();
-        const isClientField =
-          fieldTitleLower.includes("client") ||
-          fieldTitleLower.includes("counterparty") ||
-          fieldTitleLower.includes("customer") ||
-          fieldTitleLower.includes("contact") ||
-          fieldTitleLower.includes("email") ||
-          fieldTitleLower.includes("phone") ||
-          fieldTitleLower.includes("address") ||
-          fieldTitleLower.includes("name");
+        // Check if counterparty_legal_name has a value
+        if (
+          question.uid === "counterparty_legal_name" &&
+          !documentFields[question.uid]?.trim()
+        ) {
+          errors.push(
+            `${question.title || "Counterparty Legal Name"} is required`
+          );
+        }
 
-        if (!isClientField) {
+        // For other special questions
+        else if (!documentFields[question.uid]?.trim()) {
+          errors.push(`${question.title} is required`);
+        }
+      }
+    });
+
+    // Validate required template fields that have field mappings
+    templateQuestions.forEach((question) => {
+      if (question.isRequired && question.fieldUid) {
+        // Find the corresponding field
+        const field = templateFields.find((f) => f.uid === question.fieldUid);
+
+        // Skip validation for fields that the current signing side isn't responsible for
+        const isOurQuestion =
+          !question.signingSideUids ||
+          question.signingSideUids.length === 0 ||
+          question.signingSideUids.includes("079c85c7-9cad-46e1-a3f8-c68af9026f0c"); // CST side UID
+
+        if (!isOurQuestion) {
+          return; // Skip validation for questions not on our side
+        }
+
+        if (!documentFields[question.fieldUid]?.trim()) {
+          const fieldTitle =
+            field?.title || question.title || question.fieldUid;
           errors.push(`${fieldTitle} is required`);
         }
       }
     });
 
-    // Show errors as toasts instead of in alert
+    // Log validation results for debugging
     if (errors.length > 0) {
+      console.log("Validation errors:", errors);
+
+      // Show errors as toasts
       errors.forEach((error) => {
         toast.error(error);
       });
+    } else {
+      console.log("Document validation passed");
     }
 
     setValidationErrors(errors);
@@ -492,101 +1068,11 @@ export function SyncDashboard() {
   };
 
   const handleCreateDocument = () => {
-    if (!validateFields()) {
-      return;
-    }
-
-    setIsCreatingDocument(true);
-
-    // Transform document fields from object to array format
-    const fieldsArray = Object.entries(documentFields).map(([uid, value]) => ({
-      uid,
-      value: value?.toString() || "",
-    }));
-
-    // Create properly formatted request according to API specs
-    const requestData = {
-      templateId: selectedTemplate,
-      contract: {
-        answers: [], // If we have answers, we'd format them here
-        fields: fieldsArray,
-        owner: {
-          name: "Shane Thorne",
-          username: "s.thorne@cst.co.uk",
-        },
-        name: documentTitle,
-      },
-    };
-
-    // Dispatch action to create contract with correctly formatted data
-    dispatch(createJuroContract(requestData))
-      .unwrap()
-      .then((contract) => {
-        if (contract && contract.id) {
-          setCreatedDocumentId(contract.id.toString());
-          setDocumentCreated(true);
-          toast.success(`Document "${documentTitle}" created successfully`);
-        }
-      })
-      .catch((error) => {
-        console.error("Error creating document:", error);
-        toast.error("Failed to create document. Please try again.");
-      })
-      .finally(() => {
-        setIsCreatingDocument(false);
-      });
+    debouncedCreateDocument();
   };
 
   const handleSendForSigning = () => {
-    if (!createdDocumentId) {
-      toast.error("Please create the document first");
-      return;
-    }
-
-    try {
-      const signingData = {
-        provider: selectedSignatureProvider,
-        recipients: [
-          {
-            email:
-              documentFields.clientEmail ||
-              selectedClient.email ||
-              detailedClientData?.accountsemailaddress,
-            name: documentFields.clientName || selectedClient.name,
-            role: "Signatory",
-          },
-        ],
-      };
-
-      dispatch(
-        sendContractForSigning({
-          contractId: createdDocumentId,
-          signingUid: "primary",
-          data: signingData,
-        })
-      )
-        .unwrap()
-        .then((signingResult) => {
-          if (signingResult) {
-            // Update document status
-            const documentId = signingResult.id || createdDocumentId;
-            setDocumentStatus({
-              ...documentStatus,
-              [documentId]: "Sent for signature",
-            });
-
-            toast.success(`Document "${documentTitle}" sent for signing`);
-            setIsDocumentDialogOpen(false);
-          }
-        })
-        .catch((error) => {
-          console.error("Error sending document for signing:", error);
-          toast.error("Failed to send document. Please try again.");
-        });
-    } catch (error) {
-      console.error("Error preparing document for signing:", error);
-      toast.error("Failed to send document. Please try again.");
-    }
+    debouncedSendForSigning();
   };
 
   const handleDownload = () => {
@@ -595,9 +1081,28 @@ export function SyncDashboard() {
       return;
     }
 
-    // Simulate download functionality
-    toast.success(`Document "${documentTitle}" downloaded`);
-    // In a real implementation, this would trigger a download of the document using the document ID
+    safeApiCall(
+      `downloadPdf_${createdDocumentId}`,
+      () => dispatch(downloadContractPdf(createdDocumentId)).unwrap(),
+      (response: any) => {
+        const blob = new Blob([response], { type: "application/pdf" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${documentTitle.replace(/\s+/g, "_")}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+
+        toast.success(`Document "${documentTitle}" downloaded`);
+      },
+      (error: any) => {
+        console.error("Error downloading document:", error);
+        toast.error(
+          `Failed to download document: ${error.message || "Unknown error"}`
+        );
+      }
+    );
   };
 
   // Helper function to determine contract type from template
@@ -648,8 +1153,69 @@ export function SyncDashboard() {
     return !skipFields.includes(field.uid);
   };
 
+  // Get question by UID
+  const getQuestionByUid = (uid: string) => {
+    return templateQuestions.find((q) => q.uid === uid);
+  };
+
+  // Group template fields by category
+  const groupFieldsByCategory = () => {
+    const groups: Record<string, TemplateField[]> = {
+      contract: [],
+      client: [],
+      cst: [],
+      dates: [],
+      other: [],
+    };
+
+    templateFields.forEach((field) => {
+      const title = field.title.toLowerCase();
+
+      if (title.includes("counterparty") || title.includes("client")) {
+        groups.client.push(field);
+      } else if (title.includes("cst") || title.includes("supplier")) {
+        groups.cst.push(field);
+      } else if (title.includes("date") || title.includes("term")) {
+        groups.dates.push(field);
+      } else if (title.includes("contract") || title.includes("quote")) {
+        groups.contract.push(field);
+      } else {
+        groups.other.push(field);
+      }
+    });
+
+    return groups;
+  };
+
+  // Add a status indicator to show when rate limited or API calls in progress
+  const isAnyApiCallInProgress =
+    Object.values(apiCallsInProgress).some(Boolean);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
+      {/* Add API status indicator for debugging */}
+      {(isRateLimited || isAnyApiCallInProgress) && (
+        <div
+          className={`fixed bottom-4 right-4 p-2 rounded-md z-50 ${
+            isRateLimited ? "bg-red-500" : "bg-yellow-500"
+          } text-white text-sm`}
+        >
+          {isRateLimited ? (
+            <span>
+              Rate limited - reset in{" "}
+              {rateLimitResetTime
+                ? Math.ceil(
+                    (rateLimitResetTime.getTime() - new Date().getTime()) / 1000
+                  )
+                : "??"}{" "}
+              seconds
+            </span>
+          ) : (
+            <span>API calls in progress...</span>
+          )}
+        </div>
+      )}
+
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-[1200px] w-full mx-auto">
           <div className="w-full min-w-[1000px] mx-auto">
@@ -916,169 +1482,257 @@ export function SyncDashboard() {
                 />
               </div>
 
-              {templateFields.length > 0 && (
-                <div className="border rounded-md p-4 mt-2">
-                  <h3 className="text-sm font-medium mb-3">Template Fields</h3>
-                  {templateFields.filter(shouldRenderField).map((field) => {
-                    const question = getQuestionForField(field.uid);
-                    return (
-                      <div
-                        key={field.uid}
-                        className="grid grid-cols-4 items-start gap-4 mb-4"
-                      >
-                        <div className="text-right">
-                          <Label htmlFor={field.uid} className="capitalize">
-                            {field.title}
-                            {question?.isRequired && (
-                              <span className="text-red-500">*</span>
-                            )}
-                          </Label>
-                          {question?.text && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {question.text}
-                            </p>
-                          )}
-                        </div>
-                        {field.type === "text_area" ? (
-                          <Textarea
-                            id={field.uid}
-                            value={documentFields[field.uid] || ""}
-                            onChange={(e) =>
-                              handleFieldChange(field.uid, e.target.value)
-                            }
-                            className="col-span-3"
-                            rows={3}
-                            placeholder={`Enter ${field.title.toLowerCase()}`}
-                          />
-                        ) : field.type === "calendar" ? (
-                          <Input
-                            id={field.uid}
-                            type="date"
-                            value={documentFields[field.uid] || ""}
-                            onChange={(e) =>
-                              handleFieldChange(field.uid, e.target.value)
-                            }
-                            className="col-span-3"
-                          />
-                        ) : (
-                          <Input
-                            id={field.uid}
-                            type={field.type === "email" ? "email" : "text"}
-                            value={documentFields[field.uid] || ""}
-                            onChange={(e) =>
-                              handleFieldChange(field.uid, e.target.value)
-                            }
-                            className="col-span-3"
-                            placeholder={`Enter ${field.title.toLowerCase()}`}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              {/* Form fields rendering */}
+              {templateFields.length > 0 && !isPreviewMode && (
+                <>
+                  <div className="border rounded-md p-4 mt-2">
+                    <h3 className="text-sm font-medium mb-3">
+                      Document Information
+                    </h3>
+                    <div className="grid grid-cols-4 items-center gap-4 mb-2">
+                      <Label htmlFor="title" className="text-right">
+                        Document Title<span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="title"
+                        value={documentTitle}
+                        onChange={(e) => setDocumentTitle(e.target.value)}
+                        className="col-span-3"
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4 mb-2">
+                      <Label htmlFor="description" className="text-right">
+                        Description
+                      </Label>
+                      <Textarea
+                        id="description"
+                        value={documentDescription}
+                        onChange={(e) => setDocumentDescription(e.target.value)}
+                        className="col-span-3"
+                        rows={2}
+                      />
+                    </div>
+                  </div>
 
-              <div className="border rounded-md p-4 mt-2">
-                <h3 className="text-sm font-medium mb-3">Client Information</h3>
-                <div className="grid grid-cols-4 items-center gap-4 mb-2">
-                  <Label htmlFor="clientName" className="text-right">
-                    Client Name<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="clientName"
-                    value={documentFields.clientName || ""}
-                    onChange={(e) =>
-                      handleFieldChange("clientName", e.target.value)
-                    }
-                    className="col-span-3"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4 mb-2">
-                  <Label htmlFor="clientEmail" className="text-right">
-                    Client Email<span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="clientEmail"
-                    type="email"
-                    value={documentFields.clientEmail || ""}
-                    onChange={(e) =>
-                      handleFieldChange("clientEmail", e.target.value)
-                    }
-                    className="col-span-3"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4 mb-2">
-                  <Label htmlFor="clientAddress" className="text-right">
-                    Client Address
-                  </Label>
-                  <Input
-                    id="clientAddress"
-                    value={documentFields.clientAddress || ""}
-                    onChange={(e) =>
-                      handleFieldChange("clientAddress", e.target.value)
-                    }
-                    className="col-span-3"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4 mb-2">
-                  <Label htmlFor="clientPhone" className="text-right">
-                    Client Phone
-                  </Label>
-                  <Input
-                    id="clientPhone"
-                    value={documentFields.clientPhone || ""}
-                    onChange={(e) =>
-                      handleFieldChange("clientPhone", e.target.value)
-                    }
-                    className="col-span-3"
-                  />
-                </div>
-                {detailedClientData?.accountsfirstname && (
-                  <div className="grid grid-cols-4 items-center gap-4 mb-2">
-                    <Label htmlFor="accountsContact" className="text-right">
-                      Accounts Contact
-                    </Label>
-                    <Input
-                      id="accountsContact"
-                      value={documentFields.accountsFullName || ""}
-                      onChange={(e) =>
-                        handleFieldChange("accountsFullName", e.target.value)
-                      }
-                      className="col-span-3"
-                    />
+                  {/* Display special questions that don't have field mappings */}
+                  {templateQuestions.filter(
+                    (q) =>
+                      !q.fieldUid &&
+                      !["signatory_name", "signatory_email"].includes(q.uid)
+                  ).length > 0 && (
+                    <div className="border rounded-md p-4 mt-2">
+                      <h3 className="text-sm font-medium mb-3">
+                        Document Questions
+                      </h3>
+                      {templateQuestions
+                        .filter(
+                          (q) =>
+                            !q.fieldUid &&
+                            !["signatory_name", "signatory_email"].includes(
+                              q.uid
+                            )
+                        )
+                        .map((question) => (
+                          <div
+                            key={question.uid}
+                            className="grid grid-cols-4 items-start gap-4 mb-4"
+                          >
+                            <div className="text-right">
+                              <Label
+                                htmlFor={question.uid}
+                                className="capitalize"
+                              >
+                                {question.title}
+                                {question.isRequired && (
+                                  <span className="text-red-500">*</span>
+                                )}
+                              </Label>
+                              {question.text && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {question.text}
+                                </p>
+                              )}
+                            </div>
+                            <Input
+                              id={question.uid}
+                              value={documentFields[question.uid] || ""}
+                              onChange={(e) =>
+                                handleFieldChange(question.uid, e.target.value)
+                              }
+                              className="col-span-3"
+                              placeholder={`Enter ${question.title.toLowerCase()}`}
+                            />
+                          </div>
+                        ))}
+                    </div>
+                  )}
+
+                  {/* Group fields by category */}
+                  {Object.entries(groupFieldsByCategory()).map(
+                    ([category, fields]) =>
+                      fields.length > 0 && (
+                        <div
+                          key={category}
+                          className="border rounded-md p-4 mt-2"
+                        >
+                          <h3 className="text-sm font-medium mb-3 capitalize">
+                            {category} Information
+                          </h3>
+                          {fields.map((field) => {
+                            const question = getQuestionForField(field.uid);
+                            return (
+                              <div
+                                key={field.uid}
+                                className="grid grid-cols-4 items-start gap-4 mb-4"
+                              >
+                                <div className="text-right">
+                                  <Label
+                                    htmlFor={field.uid}
+                                    className="capitalize"
+                                  >
+                                    {field.title}
+                                    {question?.isRequired && (
+                                      <span className="text-red-500">*</span>
+                                    )}
+                                  </Label>
+                                  {question?.text && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {question.text}
+                                    </p>
+                                  )}
+                                </div>
+                                {field.type === "text_area" ? (
+                                  <Textarea
+                                    id={field.uid}
+                                    value={documentFields[field.uid] || ""}
+                                    onChange={(e) =>
+                                      handleFieldChange(
+                                        field.uid,
+                                        e.target.value
+                                      )
+                                    }
+                                    className="col-span-3"
+                                    rows={3}
+                                    placeholder={
+                                      field.value ||
+                                      `Enter ${field.title.toLowerCase()}`
+                                    }
+                                  />
+                                ) : field.type === "calendar" ? (
+                                  <Input
+                                    id={field.uid}
+                                    type="date"
+                                    value={documentFields[field.uid] || ""}
+                                    onChange={(e) =>
+                                      handleFieldChange(
+                                        field.uid,
+                                        e.target.value
+                                      )
+                                    }
+                                    className="col-span-3"
+                                  />
+                                ) : field.type === "companies-house" ? (
+                                  <div className="col-span-3 flex flex-col gap-2">
+                                    <Input
+                                      id={field.uid}
+                                      value={documentFields[field.uid] || ""}
+                                      onChange={(e) =>
+                                        handleFieldChange(
+                                          field.uid,
+                                          e.target.value
+                                        )
+                                      }
+                                      placeholder={`Enter company name`}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                      Company legally registered name
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <Input
+                                    id={field.uid}
+                                    type={
+                                      field.type === "email" ? "email" : "text"
+                                    }
+                                    value={documentFields[field.uid] || ""}
+                                    onChange={(e) =>
+                                      handleFieldChange(
+                                        field.uid,
+                                        e.target.value
+                                      )
+                                    }
+                                    className="col-span-3"
+                                    placeholder={
+                                      field.value ||
+                                      `Enter ${field.title.toLowerCase()}`
+                                    }
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )
+                  )}
+
+                  {/* Signature Information Section */}
+                  <div className="border rounded-md p-4 mt-2">
+                    <h3 className="text-sm font-medium mb-3">
+                      Signature Information
+                    </h3>
+                    <div className="grid grid-cols-4 items-center gap-4 mb-2">
+                      <Label htmlFor="signatory_name" className="text-right">
+                        Signatory Name<span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="signatory_name"
+                        value={documentFields.signatory_name || "Shane Thorne"}
+                        onChange={(e) =>
+                          handleFieldChange("signatory_name", e.target.value)
+                        }
+                        className="col-span-3"
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4 mb-2">
+                      <Label htmlFor="signatory_email" className="text-right">
+                        Signatory Email<span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="signatory_email"
+                        type="email"
+                        value={
+                          documentFields.signatory_email || "s.thorne@cst.co.uk"
+                        }
+                        onChange={(e) =>
+                          handleFieldChange("signatory_email", e.target.value)
+                        }
+                        className="col-span-3"
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4 mb-2">
+                      <Label
+                        htmlFor="signature_provider"
+                        className="text-right"
+                      >
+                        Signature Provider
+                      </Label>
+                      <Select
+                        value={selectedSignatureProvider}
+                        onValueChange={setSelectedSignatureProvider}
+                      >
+                        <SelectTrigger className="col-span-3">
+                          <SelectValue placeholder="Select signature provider" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="docusign">DocuSign</SelectItem>
+                          <SelectItem value="hellosign">HelloSign</SelectItem>
+                          <SelectItem value="adobesign">Adobe Sign</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                )}
-                {detailedClientData?.accountsid && (
-                  <div className="grid grid-cols-4 items-center gap-4 mb-2">
-                    <Label htmlFor="accountsId" className="text-right">
-                      Accounts ID
-                    </Label>
-                    <Input
-                      id="accountsId"
-                      value={documentFields.accountsId || ""}
-                      onChange={(e) =>
-                        handleFieldChange("accountsId", e.target.value)
-                      }
-                      className="col-span-3"
-                    />
-                  </div>
-                )}
-                {detailedClientData?.website && (
-                  <div className="grid grid-cols-4 items-center gap-4 mb-2">
-                    <Label htmlFor="website" className="text-right">
-                      Website
-                    </Label>
-                    <Input
-                      id="website"
-                      value={documentFields.website || ""}
-                      onChange={(e) =>
-                        handleFieldChange("website", e.target.value)
-                      }
-                      className="col-span-3"
-                    />
-                  </div>
-                )}
-              </div>
+                </>
+              )}
             </div>
           )}
 
