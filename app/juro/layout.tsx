@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import AuthButton from "@/components/AuthButton";
 import NavLinks from "@/components/NavLinks";
-import { Montserrat } from 'next/font/google';
+import { Montserrat } from "next/font/google";
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
   : "http://localhost:3000";
@@ -14,7 +14,7 @@ export const metadata = {
   title: "Juro Contract Management",
   description: "Juro contract management and integration dashboard",
 };
-const montserrat = Montserrat({ subsets: ['latin'] });
+const montserrat = Montserrat({ subsets: ["latin"] });
 
 export default function RootLayout({
   children,
@@ -46,20 +46,6 @@ export default function RootLayout({
             <ClientRoot>{children}</ClientRoot>
           </div>
         </main>
-        <footer className="w-full bg-[#00A1E4] py-4">
-          <div className="container mx-auto px-6 flex justify-center items-center flex-col">
-            <Image
-              src="/cst_logo_white.svg"
-              alt="CST Logo"
-              width={100}
-              height={33}
-              className="opacity-90 mb-2"
-            />
-            <p className="text-sm text-white font-semibold">
-              © 2024 CST LTD. All rights reserved.
-            </p>
-          </div>
-        </footer>
       </body>
     </html>
   );
