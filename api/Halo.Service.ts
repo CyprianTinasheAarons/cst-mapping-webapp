@@ -96,6 +96,24 @@ export const createHaloContract = (data: Record<string, any>) => {
   return httpCommon.post(`/halo/contracts`, data);
 };
 
+export const fetchHaloTickets = (
+  clientId?: number,
+  pageSize: number = 100,
+  pageNo: number = 1,
+  openOnly: boolean = false,
+  includeDetails: boolean = false
+) => {
+  return httpCommon.get(`/halo/tickets`, {
+    params: {
+      client_id: clientId,
+      page_size: pageSize,
+      page_no: pageNo,
+      open_only: openOnly,
+      include_details: includeDetails,
+    },
+  });
+};
+
 const HaloService = {
   getHaloClients,
   getHaloClientById,
@@ -108,6 +126,7 @@ const HaloService = {
   getHaloItemById,
   updateHaloInvoice,
   createHaloContract,
+  fetchHaloTickets,
 };
 
 export default HaloService;

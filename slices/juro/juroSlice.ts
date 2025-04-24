@@ -66,7 +66,7 @@ export const downloadContractPdf = createAsyncThunk(
   "juro/downloadContractPdf",
   async (contractId: string) => {
     const response = await juroService.downloadContractPdf(contractId);
-    return response.data;
+    return response;
   }
 );
 

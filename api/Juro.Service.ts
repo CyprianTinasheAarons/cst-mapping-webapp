@@ -111,7 +111,9 @@ export const sendContractForSigningBySignatory = (
  * @returns Promise with PDF file as a streaming response
  */
 export const downloadContractPdf = (contractId: string) => {
-  return httpCommon.get(`/api/juro/v1/contracts/${contractId}/pdf`);
+  return httpCommon.get(`/api/juro/v1/contracts/${contractId}/pdf`, {
+    responseType: 'arraybuffer'
+  });
 };
 
 /**

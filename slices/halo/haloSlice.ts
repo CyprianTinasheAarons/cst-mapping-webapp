@@ -173,12 +173,21 @@ export const updateHaloInvoice = createAsyncThunk(
   }
 );
 
+export const fetchHaloTickets = createAsyncThunk(
+  "halo/fetchTickets",
+  async (clientId?: number) => {
+    const response = await HaloService.fetchHaloTickets(clientId);
+    return response.data;
+  }
+);
+
 interface HaloState {
   clients: any[];
   clientById: any | null;
   items: any[];
   itemsForIngram: any[];
   contracts: any[];
+  tickets: any[];
   currentItem: any | null;
   itemById: any | null;
   recurringInvoices: any[];
@@ -193,11 +202,13 @@ const initialState: HaloState = {
   itemsForIngram: [],
   itemById: null,
   contracts: [],
+  tickets: [],
   currentItem: null,
   recurringInvoices: [],
   status: "idle",
   error: null,
 };
+
 
 const haloSlice = createSlice({
   name: "halo",
@@ -339,6 +350,17 @@ const haloSlice = createSlice({
         state.recurringInvoices = state.recurringInvoices.map((invoice) =>
           invoice.id === action.payload.id ? action.payload : invoice
         );
+      })
+      .addCase(fetchHaloTickets.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(fetchHaloTickets.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.tickets = action.payload;
+      })
+      .addCase(fetchHaloTickets.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
       });
   },
 });

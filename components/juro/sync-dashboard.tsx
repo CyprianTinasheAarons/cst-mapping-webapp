@@ -20,6 +20,9 @@ import {
   Download,
   Send,
   AlertCircle,
+  Eye,
+  File,
+  ExternalLink,
 } from "lucide-react";
 import {
   Pagination,
@@ -51,6 +54,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 
 import { Label } from "@/components/ui/label";
@@ -65,6 +69,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { JuroContractCreator } from "./juroContractCreator";
+import PdfPreview from "./PdfPreview";
 
 interface TemplateField {
   title: string;
@@ -129,6 +134,7 @@ export function SyncDashboard() {
   const [documentStatus, setDocumentStatus] = useState<Record<string, string>>(
     {}
   );
+  const [documentUrls, setDocumentUrls] = useState<Record<string, string>>({});
   const [templateSelectionHistory, setTemplateSelectionHistory] = useState<
     string[]
   >([]);
@@ -143,6 +149,11 @@ export function SyncDashboard() {
     null
   );
   const [documentCreated, setDocumentCreated] = useState(false);
+
+  // PDF Preview states
+  const [previewData, setPreviewData] = useState<ArrayBuffer | null>(null);
+  const [previewFilename, setPreviewFilename] = useState<string>("");
+  const [showPreview, setShowPreview] = useState<boolean>(false);
 
   // Add caching and rate limit states
   const [templateCache, setTemplateCache] = useState<Record<string, any>>({});
@@ -343,14 +354,58 @@ export function SyncDashboard() {
           if (contract && contract.id) {
             setCreatedDocumentId(contract.id.toString());
             setDocumentCreated(true);
-            toast.success(`Document "${documentTitle}" created successfully`);
+            setIsCreatingDocument(false);
+            setDocumentStatus({
+              ...documentStatus,
+              [contract.id]: contract.status || "Draft",
+            });
+
+            // Generate and store document URLs
+            const internalUrl = `https://app.juro.com/sign/${contract.id}`;
+            const previewUrl =
+              contract.sharingUrl || `https://app.juro.com/${contract.id}`;
+
+            // Update document URLs state
+            setDocumentUrls({
+              ...documentUrls,
+              [contract.id]: {
+                internal: internalUrl,
+                preview: previewUrl,
+              },
+            });
+
+            // Save to local storage if client is selected
+            if (selectedClient && selectedClient.id) {
+              saveDocumentUrlToLocalStorage(
+                selectedClient.id.toString(),
+                contract.id.toString(),
+                internalUrl,
+                documentTitle
+              );
+            }
+
+            toast.success(
+              <div>
+                <div>Document created successfully!</div>
+                <a
+                  href={internalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm underline hover:text-primary"
+                >
+                  Open in Juro
+                </a>
+              </div>
+            );
 
             // Refresh contracts list with a delay to avoid rate limiting
             setTimeout(() => {
               dispatch(fetchHaloContracts());
             }, 2000);
+          } else {
+            toast.error("Failed to create document: No ID returned");
+            setIsCreatingDocument(false);
           }
-          setIsCreatingDocument(false);
         },
         (error) => {
           console.error("Error creating document:", error);
@@ -910,10 +965,41 @@ export function SyncDashboard() {
   };
 
   const handlePreview = () => {
-    if (!validateFields()) {
+    if (!createdDocumentId) {
+      toast.error("Please create the document first");
       return;
     }
-    setIsPreviewMode(true);
+
+    safeApiCall(
+      `previewPdf_${createdDocumentId}`,
+      () => dispatch(downloadContractPdf(createdDocumentId)).unwrap(),
+      (response: any) => {
+        // Extract filename from content-disposition header if available
+        let filename = `${documentTitle.replace(/\s+/g, "_")}.pdf`;
+        const contentDisposition = response.headers?.["content-disposition"];
+        if (contentDisposition) {
+          const filenameMatch = /filename="(.+?)"/.exec(contentDisposition);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1];
+          }
+        }
+
+        setPreviewData(response.data);
+        setPreviewFilename(filename);
+        setShowPreview(true);
+      },
+      (error: any) => {
+        console.error("Error previewing document:", error);
+        toast.error(
+          `Failed to preview document: ${error.message || "Unknown error"}`
+        );
+      }
+    );
+  };
+
+  const closePreview = () => {
+    setShowPreview(false);
+    setPreviewData(null);
   };
 
   const handleCreateDocument = () => {
@@ -934,16 +1020,28 @@ export function SyncDashboard() {
       `downloadPdf_${createdDocumentId}`,
       () => dispatch(downloadContractPdf(createdDocumentId)).unwrap(),
       (response: any) => {
-        const blob = new Blob([response], { type: "application/pdf" });
+        // Extract filename from content-disposition header if available
+        let filename = `${documentTitle.replace(/\s+/g, "_")}.pdf`;
+        const contentDisposition = response.headers?.["content-disposition"];
+        if (contentDisposition) {
+          const filenameMatch = /filename="(.+?)"/.exec(contentDisposition);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1];
+          }
+        }
+
+        // Create a blob from the arraybuffer data
+        const blob = new Blob([response.data], { type: "application/pdf" });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${documentTitle.replace(/\s+/g, "_")}.pdf`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
 
-        toast.success(`Document "${documentTitle}" downloaded`);
+        toast.success(`Document "${filename}" downloaded`);
       },
       (error: any) => {
         console.error("Error downloading document:", error);
@@ -1040,6 +1138,63 @@ export function SyncDashboard() {
   const isAnyApiCallInProgress =
     Object.values(apiCallsInProgress).some(Boolean);
 
+  // Local storage utility for document URLs
+  const saveDocumentUrlToLocalStorage = useCallback(
+    (
+      clientId: string,
+      documentId: string,
+      documentUrl: string,
+      documentTitle: string
+    ) => {
+      try {
+        // Get existing URLs for this client
+        const storedData = localStorage.getItem("client_document_urls");
+        const clientDocUrls = storedData ? JSON.parse(storedData) : {};
+
+        // Update the URLs for this client
+        if (!clientDocUrls[clientId]) {
+          clientDocUrls[clientId] = [];
+        }
+
+        // Add the new document URL with metadata
+        clientDocUrls[clientId].push({
+          id: documentId,
+          url: documentUrl,
+          title: documentTitle,
+          createdAt: new Date().toISOString(),
+        });
+
+        // Save back to local storage
+        localStorage.setItem(
+          "client_document_urls",
+          JSON.stringify(clientDocUrls)
+        );
+
+        console.log(`Saved document URL for client ${clientId}:`, documentUrl);
+      } catch (error) {
+        console.error("Error saving document URL to local storage:", error);
+      }
+    },
+    []
+  );
+
+  // Get document URLs for a client
+  const getClientDocumentUrls = useCallback((clientId: string) => {
+    try {
+      const storedData = localStorage.getItem("client_document_urls");
+      if (!storedData) return [];
+
+      const clientDocUrls = JSON.parse(storedData);
+      return clientDocUrls[clientId] || [];
+    } catch (error) {
+      console.error(
+        "Error retrieving document URLs from local storage:",
+        error
+      );
+      return [];
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Add API status indicator for debugging */}
@@ -1108,23 +1263,92 @@ export function SyncDashboard() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleViewContracts(client)}
-                            >
-                              <FileText className="h-4 w-4 mr-2" />
-                              Contracts
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
                               onClick={() => handleOpenDocument(client)}
                             >
                               <Plus className="h-4 w-4 mr-2" />
                               Document
                             </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              asChild
+                            >
+                              <a
+                                href={`https://cstltd.halopsa.com/customers?mainview=client&inactive=false&hideinternal=false&serviceaccounts=true&nonserviceaccounts=true&clientid=${client.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center"
+                              >
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                Halo PSA
+                              </a>
+                            </Button>
                             <Button variant="outline" size="sm">
                               <Lock className="h-4 w-4 mr-2" />
                               Admin
                             </Button>
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="space-x-1"
+                                >
+                                  <File className="h-3.5 w-3.5" />
+                                  <span>Documents</span>
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-md">
+                                <DialogHeader>
+                                  <DialogTitle>Client Documents</DialogTitle>
+                                  <DialogDescription>
+                                    Documents created for {client.name}
+                                  </DialogDescription>
+                                </DialogHeader>
+
+                                {(() => {
+                                  const clientDocUrls = getClientDocumentUrls(
+                                    client.id.toString()
+                                  );
+                                  return clientDocUrls.length > 0 ? (
+                                    <div className="space-y-2">
+                                      {clientDocUrls.map((doc: any, index: number) => (
+                                        <div
+                                          key={index}
+                                          className="flex items-center justify-between p-2 bg-background rounded border"
+                                        >
+                                          <div className="truncate">
+                                            <p className="font-medium">
+                                              {doc.title ||
+                                                `Document ${index + 1}`}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                              {new Date(
+                                                doc.createdAt
+                                              ).toLocaleDateString()}
+                                            </p>
+                                          </div>
+                                          <div className="flex space-x-2">
+                                            <a
+                                              href={doc.url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="p-1 hover:bg-accent rounded"
+                                            >
+                                              <ExternalLink className="h-4 w-4" />
+                                            </a>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-center py-4 text-muted-foreground">
+                                      No documents found
+                                    </div>
+                                  );
+                                })()}
+                              </DialogContent>
+                            </Dialog>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1613,6 +1837,25 @@ export function SyncDashboard() {
                 ) : (
                   <>
                     <Button
+                      onClick={handlePreview}
+                      variant="secondary"
+                      className="mr-2"
+                      disabled={!documentCreated}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      Preview
+                    </Button>
+                    <Button variant="outline" className="mr-2" asChild>
+                      <a
+                        href={`https://app.juro.com/sign/${createdDocumentId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open in Juro
+                      </a>
+                    </Button>
+                    <Button
                       onClick={handleDownload}
                       variant="secondary"
                       disabled={!documentCreated}
@@ -1644,7 +1887,7 @@ export function SyncDashboard() {
                   variant="secondary"
                   className="mr-2"
                 >
-                  <FileText className="h-4 w-4 mr-2" />
+                  <Eye className="h-4 w-4 mr-2" />
                   Preview
                 </Button>
                 <Button
@@ -1762,6 +2005,13 @@ export function SyncDashboard() {
           </Table>
         </DialogContent>
       </Dialog>
+      {showPreview && (
+        <PdfPreview
+          pdfData={previewData}
+          filename={previewFilename}
+          onClose={closePreview}
+        />
+      )}
       <ToastContainer />
     </div>
   );
