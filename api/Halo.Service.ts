@@ -114,6 +114,20 @@ export const fetchHaloTickets = (
   });
 };
 
+export const getHaloTicketById = (
+  ticketId: number,
+  includeDetails: boolean = true,
+  includeLastAction: boolean = false,
+  ticketIdOnly: boolean = false
+) => {
+  return httpCommon.get(`/halo/ticket/${ticketId}`, {
+    params: {
+      include_details: includeDetails,
+      include_last_action: includeLastAction,
+      ticket_id_only: ticketIdOnly,
+    },
+  });
+};
 
 
 const HaloService = {
@@ -129,6 +143,7 @@ const HaloService = {
   updateHaloInvoice,
   createHaloContract,
   fetchHaloTickets,
+  getHaloTicketById,
 };
 
 export default HaloService;

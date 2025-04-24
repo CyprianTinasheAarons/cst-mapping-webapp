@@ -40,7 +40,7 @@ import {
   sendContractForSigning,
   downloadContractPdf,
 } from "@/slices/juro/juroSlice";
-import { fetchHaloClientById } from "@/slices/halo/haloSlice";
+import { fetchHaloTicketById } from "@/slices/halo/haloSlice";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { 
@@ -73,7 +73,6 @@ interface TemplateQuestion {
 
 export default function CreateDocumentPage() {
   const searchParams = useSearchParams();
-  const clientId = searchParams.get("id");
   const ticketId = searchParams.get("ticket_id");
   
   // Step tracking
@@ -81,7 +80,7 @@ export default function CreateDocumentPage() {
   
   // Loading states
   const [isPageLoading, setIsPageLoading] = useState(true);
-  const [isClientLoading, setIsClientLoading] = useState(true);
+  const [isTicketLoading, setIsTicketLoading] = useState(true);
   const [isTemplatesLoading, setIsTemplatesLoading] = useState(true);
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
   const [isCreatingDocument, setIsCreatingDocument] = useState(false);
@@ -111,252 +110,7 @@ export default function CreateDocumentPage() {
   
   const dispatch = useAppDispatch();
   const { templates: juroTemplates, status: juroStatus } = useAppSelector((state) => state.juro);
-  const { clientById: detailedClientData, status: haloStatus } = useAppSelector((state) => state.halo);
-
-  const loadTemplateDetails = useCallback((templateId: string) => {
-    // Check if template is already cached
-    if (templateCache[templateId]) {
-      console.log(`Using cached template: ${templateId}`);
-      processTemplateDetails(templateCache[templateId]);
-      return;
-    }
-
-    setIsLoadingTemplate(true);
-    dispatch(fetchJuroTemplate(templateId))
-      .unwrap()
-      .then((template) => {
-        // Cache the template
-        setTemplateCache(prev => ({
-          ...prev,
-          [templateId]: template
-        }));
-        processTemplateDetails(template);
-        setIsLoadingTemplate(false);
-      })
-      .catch((error) => {
-        console.error(`Error loading template ${templateId}:`, error);
-        toast.error("Failed to load template details.");
-        setIsLoadingTemplate(false);
-      });
-  }, [templateCache, dispatch]);
-
-  const processTemplateDetails = useCallback((template: any) => {
-    console.log("Processing template:", template.name);
-
-    // Set template fields
-    setTemplateFields(template.fields || []);
-    setTemplateQuestions(template.questions || []);
-
-    // Create initial document fields based on template fields and client data
-    const initialFields: Record<string, string> = {};
-
-    // Add special fields required by Juro
-    initialFields.signatory_name = "Shane Thorne";
-    initialFields.signatory_email = "s.thorne@cst.co.uk";
-
-    // Handle counterparty_legal_name if it exists in template questions
-    if (detailedClientData && template.questions && Array.isArray(template.questions)) {
-      const counterpartyLegalNameQuestion = template.questions.find(
-        (q: TemplateQuestion) => q.uid === "counterparty_legal_name"
-      );
-
-      if (counterpartyLegalNameQuestion) {
-        initialFields.counterparty_legal_name = detailedClientData.name;
-      }
-    }
-
-    // Map client data to template fields
-    if (detailedClientData && template.fields) {
-      // Map known field UIDs
-      template.fields.forEach((field: TemplateField) => {
-        switch (field.uid) {
-          // Term field
-          case "6128253a-93dc-4d83-b972-bb9497513843":
-            initialFields[field.uid] = field.value || "12-Month";
-            break;
-
-          // Counterparty Contact Name
-          case "73aa33aa-7469-41a4-9fff-76bb84a88fdd":
-            initialFields[field.uid] =
-              detailedClientData.accountsfirstname && detailedClientData.accountslastname
-                ? `${detailedClientData.accountsfirstname} ${detailedClientData.accountslastname}`
-                : detailedClientData.main_contact_name || "";
-            break;
-
-          // Counterparty Address
-          case "2b82a989-7eee-4783-a544-2acec331cc84":
-            if (detailedClientData.main_invoice_address) {
-              const address = detailedClientData.main_invoice_address;
-              initialFields[field.uid] = [
-                address.line1,
-                address.line2,
-                address.line3,
-                address.line4,
-                address.postcode,
-              ]
-                .filter(Boolean)
-                .join(", ");
-            } else {
-              initialFields[field.uid] = detailedClientData.address || "";
-            }
-            break;
-
-          // Counterparty Contact Email
-          case "2fff3269-19c6-4d02-9c78-d04156991bfb":
-            initialFields[field.uid] =
-              detailedClientData.accountsemailaddress ||
-              detailedClientData.email ||
-              "";
-            break;
-
-          // Contract Reason
-          case "8de7e9ec-14dd-43cd-9367-7049c5f72a70":
-            initialFields[field.uid] = ""; // Leave empty or set default
-            break;
-
-          // Effective Date
-          case "6e338014-47de-42c7-a816-88935e1b9d0c":
-            initialFields[field.uid] = new Date().toISOString().split("T")[0];
-            break;
-
-          // Quote Number
-          case "9cea8342-725c-42c7-b50f-4ceb3425230a":
-            initialFields[field.uid] = ticketId || "";
-            break;
-
-          // Delivery Date
-          case "4a46d105-0072-4a3f-9aa5-8bf7daa56cc6":
-            initialFields[field.uid] = new Date().toISOString().split("T")[0];
-            break;
-
-          // Expiration Date
-          case "af79c1b8-d4af-4bd3-80aa-c7103058a965":
-            const expirationDate = new Date();
-            expirationDate.setMonth(expirationDate.getMonth() + 1);
-            initialFields[field.uid] = expirationDate
-              .toISOString()
-              .split("T")[0];
-            break;
-
-          // Title (CST)
-          case "afd7cc85-834f-4fd0-8e93-37d32f6f9afd":
-            initialFields[field.uid] = "Account Director";
-            break;
-
-          // Title (Counterparty)
-          case "df3b7695-0a0c-4081-9e7a-b902c87ede17":
-            initialFields[field.uid] = detailedClientData.accountstitle || "";
-            break;
-
-          // Counterparty (Company)
-          case "a50f21ec-0dd8-47dc-950b-15032103c63b":
-            initialFields[field.uid] = detailedClientData.name || "";
-            break;
-
-          default:
-            // For any other template fields, use default values if available
-            if (field.value) {
-              initialFields[field.uid] = field.value;
-            }
-
-            // Try to map fields based on titles
-            const fieldTitle = field.title?.toLowerCase() || "";
-            if (fieldTitle.includes("counterparty") || fieldTitle.includes("client")) {
-              if (fieldTitle.includes("name") || fieldTitle.includes("company")) {
-                initialFields[field.uid] = detailedClientData.name || "";
-              } else if (fieldTitle.includes("address")) {
-                if (detailedClientData.main_invoice_address) {
-                  const address = detailedClientData.main_invoice_address;
-                  initialFields[field.uid] = [
-                    address.line1,
-                    address.line2,
-                    address.line3,
-                    address.line4,
-                    address.postcode,
-                  ]
-                    .filter(Boolean)
-                    .join(", ");
-                } else {
-                  initialFields[field.uid] = detailedClientData.address || "";
-                }
-              } else if (
-                fieldTitle.includes("email") ||
-                fieldTitle.includes("contact")
-              ) {
-                initialFields[field.uid] =
-                  detailedClientData.accountsemailaddress ||
-                  detailedClientData.email ||
-                  "";
-              }
-            }
-        }
-      });
-    }
-
-    // Add quote number as a default
-    if (ticketId) {
-      template.fields.forEach((field: TemplateField) => {
-        if (field.title.toLowerCase().includes('quote') || 
-            field.uid === '9cea8342-725c-42c7-b50f-4ceb3425230a') {
-          initialFields[field.uid] = ticketId;
-        }
-      });
-    }
-
-    setDocumentFields(initialFields);
-  }, [detailedClientData, ticketId]);
-
-  const validateFields = () => {
-    const errors: string[] = [];
-    const fieldErrorsMap: Record<string, string> = {};
-    
-    // Check required fields
-    templateQuestions
-      .filter(q => q.isRequired)
-      .forEach(question => {
-        if (question.fieldUid) {
-          if (!documentFields[question.fieldUid] || documentFields[question.fieldUid].trim() === "") {
-            errors.push(`${question.title} is required`);
-            fieldErrorsMap[question.fieldUid] = `${question.title} is required`;
-          }
-        }
-      });
-    
-    // Validate document title
-    if (!documentTitle || documentTitle.trim() === "") {
-      errors.push("Document title is required");
-      fieldErrorsMap["document-title"] = "Document title is required";
-    }
-    
-    setValidationErrors(errors);
-    setFieldErrors(fieldErrorsMap);
-    return errors.length === 0;
-  };
-
-  const handleFieldChange = (fieldId: string, value: string) => {
-    setDocumentFields(prev => ({
-      ...prev,
-      [fieldId]: value
-    }));
-    
-    // Clear validation error for this field if it exists
-    if (fieldErrors[fieldId]) {
-      const updatedErrors = { ...fieldErrors };
-      delete updatedErrors[fieldId];
-      setFieldErrors(updatedErrors);
-    }
-  };
-
-  const handleTitleChange = (value: string) => {
-    setDocumentTitle(value);
-    
-    // Clear validation error for document title if it exists
-    if (fieldErrors["document-title"]) {
-      const updatedErrors = { ...fieldErrors };
-      delete updatedErrors["document-title"];
-      setFieldErrors(updatedErrors);
-    }
-  };
+  const { ticketById: detailedTicketData, status: haloStatus } = useAppSelector((state) => state.halo);
 
   // Helper function to get the associated question for a field
   const getQuestionForField = useCallback((fieldUid: string) => {
@@ -395,33 +149,368 @@ export default function CreateDocumentPage() {
     );
   }, [templateFields]);
 
-  // Load client data
+  // Process template details
+  const processTemplateDetails = useCallback((template: any) => {
+    console.log("Processing template:", template.name);
+
+    // Set template fields
+    setTemplateFields(template.fields || []);
+    setTemplateQuestions(template.questions || []);
+
+    // Create initial document fields based on template fields and ticket data
+    const initialFields: Record<string, string> = {};
+
+    // First, preserve all template default values
+    if (template.fields && Array.isArray(template.fields)) {
+      template.fields.forEach((field: TemplateField) => {
+        if (field.value !== undefined) {
+          initialFields[field.uid] = field.value;
+        }
+      });
+    }
+
+    // Add special fields required by Juro
+    initialFields.signatory_name = "Shane Thorne";
+    initialFields.signatory_email = "s.thorne@cst.co.uk";
+
+    // Handle counterparty_legal_name if it exists in template questions
+    if (detailedTicketData && template.questions && Array.isArray(template.questions)) {
+      const counterpartyLegalNameQuestion = template.questions.find(
+        (q: TemplateQuestion) => q.uid === "counterparty_legal_name"
+      );
+
+      if (counterpartyLegalNameQuestion) {
+        // Use oppcompanyname for the counterparty legal name
+        initialFields.counterparty_legal_name = detailedTicketData.oppcompanyname || "";
+      }
+    }
+
+    // Map ticket data to template fields - only override template defaults where we have ticket data
+    if (detailedTicketData && template.fields) {
+      // Map known field UIDs
+      template.fields.forEach((field: TemplateField) => {
+        switch (field.uid) {
+          // Term field - only override if no default
+          case "6128253a-93dc-4d83-b972-bb9497513843":
+            if (!initialFields[field.uid]) {
+              initialFields[field.uid] = "12-Month";
+            }
+            break;
+
+          // Counterparty Contact Name - use oppcontactname
+          case "73aa33aa-7469-41a4-9fff-76bb84a88fdd":
+            if (detailedTicketData.oppcontactname) {
+              initialFields[field.uid] = detailedTicketData.oppcontactname;
+            }
+            break;
+
+          // Counterparty Address
+          case "2b82a989-7eee-4783-a544-2acec331cc84":
+            if (detailedTicketData.oppaddr1) {
+              const address = [
+                detailedTicketData.oppaddr1,
+                detailedTicketData.oppaddr2,
+                detailedTicketData.oppaddr3,
+                detailedTicketData.oppaddr4,
+                detailedTicketData.opppostcode
+              ].filter(Boolean).join(", ");
+              
+              initialFields[field.uid] = address;
+            } else if (detailedTicketData.billing_address) {
+              const address = detailedTicketData.billing_address;
+              initialFields[field.uid] = [
+                address.line1,
+                address.line2,
+                address.line3,
+                address.line4,
+                address.postcode,
+              ].filter(Boolean).join(", ");
+            }
+            break;
+
+          // Counterparty Contact Email - use oppemailaddress
+          case "2fff3269-19c6-4d02-9c78-d04156991bfb":
+            if (detailedTicketData.oppemailaddress) {
+              initialFields[field.uid] = detailedTicketData.oppemailaddress;
+            }
+            break;
+
+          // Contract Reason - use oppreason
+          case "8de7e9ec-14dd-43cd-9367-7049c5f72a70":
+            if (detailedTicketData.oppreason) {
+              initialFields[field.uid] = detailedTicketData.oppreason;
+            }
+            break;
+
+          // Effective Date - use respondbydate if available
+          case "6e338014-47de-42c7-a816-88935e1b9d0c":
+            if (detailedTicketData.respondbydate) {
+              const date = new Date(detailedTicketData.respondbydate);
+              initialFields[field.uid] = date.toISOString().split("T")[0];
+            }
+            break;
+
+          // Quote Number - use ticket ID by default
+          case "9cea8342-725c-42c7-b50f-4ceb3425230a":
+            if (ticketId) {
+              initialFields[field.uid] = ticketId.replace(/[{}$]/g, '');
+            }
+            break;
+
+          // Delivery Date
+          case "4a46d105-0072-4a3f-9aa5-8bf7daa56cc6":
+            if (detailedTicketData.targetdate) {
+              const date = new Date(detailedTicketData.targetdate);
+              initialFields[field.uid] = date.toISOString().split("T")[0];
+            }
+            break;
+
+          // Expiration Date - use quote expiry if available or default to 1 month
+          case "af79c1b8-d4af-4bd3-80aa-c7103058a965":
+            if (detailedTicketData.deadlinedate) {
+              const date = new Date(detailedTicketData.deadlinedate);
+              initialFields[field.uid] = date.toISOString().split("T")[0];
+            }
+            break;
+
+          // Title (Counterparty) - use oppcustomertitle
+          case "df3b7695-0a0c-4081-9e7a-b902c87ede17":
+            if (detailedTicketData.oppcustomertitle) {
+              initialFields[field.uid] = detailedTicketData.oppcustomertitle;
+            }
+            break;
+
+          // Counterparty (Company) - use oppcompanyname
+          case "a50f21ec-0dd8-47dc-950b-15032103c63b":
+            if (detailedTicketData.oppcompanyname) {
+              initialFields[field.uid] = detailedTicketData.oppcompanyname;
+            }
+            break;
+
+          // Quote Value (Annual Value)
+          case "5e79b8a1-d41e-4c0f-b4e6-89f3a3c8e9d2":
+            if (detailedTicketData.oppvalue) {
+              initialFields[field.uid] = detailedTicketData.oppvalue.toString();
+            }
+            break;
+
+          default:
+            // We already set template defaults at the beginning, so only override if we have specific ticket data
+            const fieldTitle = field.title?.toLowerCase() || "";
+            if (fieldTitle.includes("counterparty") || fieldTitle.includes("client")) {
+              if (fieldTitle.includes("name") || fieldTitle.includes("company")) {
+                if (detailedTicketData.oppcompanyname) {
+                  initialFields[field.uid] = detailedTicketData.oppcompanyname;
+                }
+              } else if (fieldTitle.includes("address")) {
+                if (detailedTicketData.oppaddr1) {
+                  const address = [
+                    detailedTicketData.oppaddr1,
+                    detailedTicketData.oppaddr2,
+                    detailedTicketData.oppaddr3,
+                    detailedTicketData.oppaddr4,
+                    detailedTicketData.opppostcode
+                  ].filter(Boolean).join(", ");
+                  
+                  initialFields[field.uid] = address;
+                }
+              } else if (
+                fieldTitle.includes("email") ||
+                fieldTitle.includes("contact")
+              ) {
+                if (detailedTicketData.oppemailaddress) {
+                  initialFields[field.uid] = detailedTicketData.oppemailaddress;
+                }
+              } else if (
+                fieldTitle.includes("phone") ||
+                fieldTitle.includes("tel")
+              ) {
+                if (detailedTicketData.opptel) {
+                  initialFields[field.uid] = detailedTicketData.opptel;
+                }
+              } else if (
+                fieldTitle.includes("title") ||
+                fieldTitle.includes("position")
+              ) {
+                if (detailedTicketData.oppcustomertitle) {
+                  initialFields[field.uid] = detailedTicketData.oppcustomertitle;
+                }
+              } else if (
+                fieldTitle.includes("contact name") ||
+                fieldTitle.includes("representative")
+              ) {
+                if (detailedTicketData.oppcontactname) {
+                  initialFields[field.uid] = detailedTicketData.oppcontactname;
+                }
+              }
+            }
+            
+            // Map for customer/client definition in the definitions table
+            if (fieldTitle.includes("customer definition") || fieldTitle.includes("client definition")) {
+              if (detailedTicketData.oppcompanyname) {
+                initialFields[field.uid] = detailedTicketData.oppcompanyname;
+              }
+            }
+            
+            // Map for quote information table
+            if (fieldTitle.includes("quote") || fieldTitle.includes("proposal")) {
+              if (fieldTitle.includes("number") && ticketId) {
+                initialFields[field.uid] = ticketId.replace(/[{}$]/g, '');
+              } else if (fieldTitle.includes("value") || fieldTitle.includes("amount")) {
+                if (detailedTicketData.oppvalue) {
+                  initialFields[field.uid] = detailedTicketData.oppvalue.toString();
+                }
+              } else if (fieldTitle.includes("date")) {
+                if (detailedTicketData.respondbydate) {
+                  const date = new Date(detailedTicketData.respondbydate);
+                  initialFields[field.uid] = date.toISOString().split("T")[0];
+                }
+              }
+            }
+        }
+      });
+    }
+
+    // Set document title based on template and ticket
+    if (detailedTicketData) {
+      setDocumentTitle(`${template.name} - ${detailedTicketData.oppcompanyname || detailedTicketData.client_name || 'Unknown Company'}`);
+    }
+
+    console.log("Initialized document fields:", initialFields);
+    setDocumentFields(initialFields);
+  }, [detailedTicketData, ticketId]);
+
+  // Process ticket data and handle validation
+  const validateFields = () => {
+    const errors: string[] = [];
+    const fieldErrorsMap: Record<string, string> = {};
+
+    // Check for required fields
+    templateQuestions.forEach((question) => {
+      if (question.isRequired) {
+        const field = templateFields.find((f) => f.uid === question.fieldUid);
+        
+        if (field) {
+          const value = documentFields[field.uid];
+          if (!value || value.trim() === '') {
+            errors.push(`${field.title} is required`);
+            fieldErrorsMap[field.uid] = 'This field is required';
+          }
+        }
+      }
+    });
+
+    // Set validation errors
+    setValidationErrors(errors);
+    setFieldErrors(fieldErrorsMap);
+
+    return errors.length === 0;
+  };
+
+  // Load ticket data - handle numeric value and string format
   useEffect(() => {
-    if (clientId) {
-      // Check if the clientId is a valid number before parsing
-      const parsedId = clientId.replace(/[{}$]/g, ''); // Remove any template placeholders like {$id}
+    if (ticketId) {
+      // Clean up ticket ID if it contains template placeholders
+      const parsedId = ticketId.replace(/[{}$]/g, '');
       
       // Check if it's a valid numeric ID
       if (/^\d+$/.test(parsedId)) {
-        setIsClientLoading(true);
-        dispatch(fetchHaloClientById(parseInt(parsedId)))
+        setIsTicketLoading(true);
+        dispatch(fetchHaloTicketById(parseInt(parsedId)))
           .unwrap()
           .then(() => {
-            setIsClientLoading(false);
+            setIsTicketLoading(false);
           })
           .catch((error) => {
-            toast.error(`Error loading client data: ${error.message || 'Unknown error'}`);
-            setIsClientLoading(false);
+            toast.error(`Error loading ticket data: ${error.message || 'Unknown error'}`);
+            setIsTicketLoading(false);
           });
       } else {
-        // Handle case where ID is not a valid number
-        toast.warning('Please provide a valid client ID in the URL');
-        setIsClientLoading(false);
+        // Handle case where ticket ID is not a valid number
+        toast.warning('Please provide a valid ticket ID in the URL');
+        setIsTicketLoading(false);
       }
     } else {
-      setIsClientLoading(false);
+      setIsTicketLoading(false);
     }
-  }, [clientId, dispatch]);
+  }, [ticketId, dispatch]);
+
+  // Load template details
+  const loadTemplateDetails = useCallback((templateId: string) => {
+    // Check if template is already cached
+    if (templateCache[templateId]) {
+      console.log(`Using cached template: ${templateId}`);
+      processTemplateDetails(templateCache[templateId]);
+      return;
+    }
+
+    setIsLoadingTemplate(true);
+    dispatch(fetchJuroTemplate(templateId))
+      .unwrap()
+      .then((template) => {
+        // Cache the template
+        setTemplateCache(prev => ({
+          ...prev,
+          [templateId]: template
+        }));
+        processTemplateDetails(template);
+        setIsLoadingTemplate(false);
+      })
+      .catch((error) => {
+        console.error(`Error loading template ${templateId}:`, error);
+        toast.error("Failed to load template details.");
+        setIsLoadingTemplate(false);
+      });
+  }, [templateCache, dispatch, processTemplateDetails]);
+
+  // Handle field change
+  const handleFieldChange = (fieldId: string, value: string) => {
+    setDocumentFields(prev => ({
+      ...prev,
+      [fieldId]: value
+    }));
+    
+    // Clear error when field is updated
+    if (fieldErrors[fieldId]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[fieldId];
+        return newErrors;
+      });
+    }
+  };
+
+  const handleTitleChange = (value: string) => {
+    setDocumentTitle(value);
+    
+    // Clear validation error for document title if it exists
+    if (fieldErrors["document-title"]) {
+      const updatedErrors = { ...fieldErrors };
+      delete updatedErrors["document-title"];
+      setFieldErrors(updatedErrors);
+    }
+  };
+
+  // Handle template selection
+  const handleSelectedTemplateChange = (templateId: string) => {
+    setSelectedTemplate(templateId);
+    
+    // Clear any existing fields to prevent potential state conflicts
+    setTemplateFields([]);
+    setTemplateQuestions([]);
+    setDocumentFields({});
+    
+    // Reset validation state
+    setValidationErrors([]);
+    setFieldErrors({});
+    
+    if (templateId) {
+      // Move to step 2 when a template is selected
+      setCurrentStep(2);
+      // Load details after state has been reset
+      loadTemplateDetails(templateId);
+    }
+  };
 
   // Load templates
   useEffect(() => {
@@ -430,58 +519,22 @@ export default function CreateDocumentPage() {
       .unwrap()
       .then(() => {
         setIsTemplatesLoading(false);
+        setIsPageLoading(false);
       })
       .catch((error) => {
-        toast.error(`Error loading templates: ${error.message || 'Unknown error'}`);
+        console.error("Error loading templates:", error);
+        toast.error("Failed to load templates.");
         setIsTemplatesLoading(false);
+        setIsPageLoading(false);
       });
   }, [dispatch]);
 
   // Overall page loading state
   useEffect(() => {
-    if (!isClientLoading && !isTemplatesLoading) {
+    if (!isTicketLoading && !isTemplatesLoading) {
       setIsPageLoading(false);
     }
-  }, [isClientLoading, isTemplatesLoading]);
-
-  // Load template details when selected
-  useEffect(() => {
-    if (selectedTemplate && detailedClientData) {
-      loadTemplateDetails(selectedTemplate);
-    }
-  }, [selectedTemplate, detailedClientData, loadTemplateDetails]);
-
-  // Set quote number from ticket ID
-  useEffect(() => {
-    if (ticketId && documentFields && templateFields.length > 0) {
-      // Clean up ticket ID if it contains template placeholders
-      const cleanTicketId = ticketId.replace(/[{}$]/g, '');
-      
-      // Look for the Quote Number field and set it from the ticket ID
-      const quoteFields = templateFields.filter((field: TemplateField) => {
-        return field.title.toLowerCase().includes('quote') || 
-               field.uid === '9cea8342-725c-42c7-b50f-4ceb3425230a';
-      });
-      
-      if (quoteFields.length > 0) {
-        const newFields = { ...documentFields };
-        quoteFields.forEach((field: TemplateField) => {
-          newFields[field.uid] = cleanTicketId || '';
-        });
-        setDocumentFields(newFields);
-      }
-    }
-  }, [ticketId, templateFields, documentFields]);
-
-  // Set initial document title based on client name and template
-  useEffect(() => {
-    if (detailedClientData && selectedTemplate) {
-      const template = juroTemplates.find(t => t.id === selectedTemplate);
-      if (template) {
-        setDocumentTitle(`${detailedClientData.name} - ${template.name}`);
-      }
-    }
-  }, [detailedClientData, selectedTemplate, juroTemplates]);
+  }, [isTicketLoading, isTemplatesLoading]);
 
   const handleCreateDocument = async () => {
     if (!validateFields()) {
@@ -498,7 +551,7 @@ export default function CreateDocumentPage() {
         documentFields,
         templateFields,
         templateQuestions,
-        detailedClientData
+        detailedTicketData
       );
 
       const contract = await dispatch(createJuroContract(requestData)).unwrap();
@@ -545,8 +598,8 @@ export default function CreateDocumentPage() {
       const signingData = JuroContractCreator.createSigningRequest(
         documentFields,
         templateFields,
-        detailedClientData,
-        detailedClientData,
+        detailedTicketData,
+        detailedTicketData,
         selectedSignatureProvider
       );
 
@@ -626,7 +679,7 @@ export default function CreateDocumentPage() {
   };
 
   const handleAddToAllops = async () => {
-    if (!createdDocumentId || !documentTitle || !detailedClientData) {
+    if (!createdDocumentId || !documentTitle || !detailedTicketData) {
       toast.error("Missing required information to add to Allops");
       return;
     }
@@ -643,6 +696,82 @@ export default function CreateDocumentPage() {
       setIsAddingToAllops(false);
     }
   };
+
+  const renderTemplateField = useCallback((field: TemplateField) => {
+    const question = getQuestionForField(field.uid);
+    const hasError = fieldErrors[field.uid] !== undefined;
+    // Create default placeholder text instead of using field.placeholder which doesn't exist
+    const placeholderText = `Enter ${field.title.toLowerCase()}`;
+
+    return (
+      <div key={field.uid} className="grid grid-cols-4 items-start gap-4 mb-4">
+        <div className="text-right">
+          <Label htmlFor={field.uid} className="capitalize">
+            {field.title}
+            {question?.isRequired && <span className="text-red-500">*</span>}
+          </Label>
+          {question?.text && (
+            <p className="text-xs text-muted-foreground mt-1">{question.text}</p>
+          )}
+        </div>
+        <div className="col-span-3">
+          {field.type === 'textarea' ? (
+            <Textarea
+              id={field.uid}
+              value={documentFields[field.uid] || ''}
+              onChange={(e) => handleFieldChange(field.uid, e.target.value)}
+              className={hasError ? 'border-red-500' : ''}
+              placeholder={placeholderText}
+              rows={4}
+            />
+          ) : field.type === 'date' || field.title.toLowerCase().includes('date') ? (
+            <Input
+              id={field.uid}
+              type="date"
+              value={documentFields[field.uid] || ''}
+              onChange={(e) => handleFieldChange(field.uid, e.target.value)}
+              className={hasError ? 'border-red-500' : ''}
+            />
+          ) : field.title.toLowerCase().includes('companies house') ? (
+            <div>
+              <Input
+                id={field.uid}
+                type="text"
+                value={documentFields[field.uid] || ''}
+                onChange={(e) => handleFieldChange(field.uid, e.target.value)}
+                className={hasError ? 'border-red-500' : ''}
+                placeholder="Enter company number"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Find on <a href="https://find-and-update.company-information.service.gov.uk/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Companies House</a>
+              </p>
+            </div>
+          ) : field.title.toLowerCase().includes('email') ? (
+            <Input
+              id={field.uid}
+              type="email"
+              value={documentFields[field.uid] || ''}
+              onChange={(e) => handleFieldChange(field.uid, e.target.value)}
+              className={hasError ? 'border-red-500' : ''}
+              placeholder="email@example.com"
+            />
+          ) : (
+            <Input
+              id={field.uid}
+              type="text"
+              value={documentFields[field.uid] || ''}
+              onChange={(e) => handleFieldChange(field.uid, e.target.value)}
+              className={hasError ? 'border-red-500' : ''}
+              placeholder={placeholderText}
+            />
+          )}
+          {hasError && (
+            <p className="text-red-500 text-xs mt-1">{fieldErrors[field.uid]}</p>
+          )}
+        </div>
+      </div>
+    );
+  }, [documentFields, fieldErrors, getQuestionForField]);
 
   return (
     <div className="container max-w-5xl py-10">
@@ -665,22 +794,33 @@ export default function CreateDocumentPage() {
             <span className="text-lg">Loading...</span>
           </div>
           <p className="text-muted-foreground text-center">
-            {isClientLoading && "Loading client data..."}
+            {isTicketLoading && "Loading ticket data..."}
             {isTemplatesLoading && "Loading templates..."}
           </p>
         </div>
       ) : (
         <>
-          {/* Client Information Banner */}
-          {detailedClientData && (
+          {/* Ticket Information Banner */}
+          {detailedTicketData && (
             <Alert className="mb-6">
               <AlertTitle className="flex items-center">
                 <FileText className="h-4 w-4 mr-2" />
-                Creating document for: {detailedClientData.name}
+                Creating document for: {detailedTicketData.oppcompanyname || detailedTicketData.client_name || "Unknown Company"}
               </AlertTitle>
               <AlertDescription>
-                {ticketId && <span className="block">Quote/Ticket ID: {ticketId}</span>}
-                {detailedClientData.email && <span className="block">Email: {detailedClientData.email}</span>}
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div>
+                    <span className="block">Ticket ID: {ticketId}</span>
+                    {detailedTicketData.oppcontactname && <span className="block">Contact: {detailedTicketData.oppcontactname}</span>}
+                    {detailedTicketData.oppemailaddress && <span className="block">Email: {detailedTicketData.oppemailaddress}</span>}
+                    {detailedTicketData.opptel && <span className="block">Phone: {detailedTicketData.opptel}</span>}
+                  </div>
+                  <div>
+                    {detailedTicketData.oppvalue && <span className="block">Quote Value: £{detailedTicketData.oppvalue}</span>}
+                    {detailedTicketData.respondbydate && <span className="block">Respond By: {new Date(detailedTicketData.respondbydate).toLocaleDateString()}</span>}
+                    {detailedTicketData.opptype && <span className="block">Type: {detailedTicketData.opptype}</span>}
+                  </div>
+                </div>
               </AlertDescription>
             </Alert>
           )}
@@ -702,7 +842,7 @@ export default function CreateDocumentPage() {
                         <div className="flex items-start justify-between">
                           <div>
                             <div className="h-5 bg-gray-200 rounded w-48 mb-2"></div>
-                            <div className="h-4 bg-gray-100 rounded w-64"></div>
+                            <div className="h-10 bg-gray-100 rounded w-full"></div>
                           </div>
                           <div className="h-6 bg-gray-200 rounded w-16"></div>
                         </div>
@@ -719,7 +859,7 @@ export default function CreateDocumentPage() {
                             ? 'border-primary bg-primary/5' 
                             : 'hover:border-primary/50'
                         }`}
-                        onClick={() => setSelectedTemplate(template.id)}
+                        onClick={() => handleSelectedTemplateChange(template.id)}
                       >
                         <div className="flex items-start justify-between">
                           <div>
@@ -927,109 +1067,7 @@ export default function CreateDocumentPage() {
                           <h3 className="text-sm font-medium mb-3 capitalize">
                             {category} Information
                           </h3>
-                          {fields.map((field) => {
-                            const question = getQuestionForField(field.uid);
-                            return (
-                              <div
-                                key={field.uid}
-                                className="grid grid-cols-4 items-start gap-4 mb-4"
-                              >
-                                <div className="text-right">
-                                  <Label
-                                    htmlFor={field.uid}
-                                    className={`capitalize ${fieldErrors[field.uid] ? "text-destructive" : ""}`}
-                                  >
-                                    {field.title}
-                                    {question?.isRequired && (
-                                      <span className={fieldErrors[field.uid] ? "text-destructive" : "text-red-500"}>*</span>
-                                    )}
-                                  </Label>
-                                  {question?.text && (
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                      {question.text}
-                                    </p>
-                                  )}
-                                </div>
-                                
-                                {field.type === "text_area" || field.type === "textArea" ? (
-                                  <Textarea
-                                    id={field.uid}
-                                    value={documentFields[field.uid] || ""}
-                                    onChange={(e) =>
-                                      handleFieldChange(
-                                        field.uid,
-                                        e.target.value
-                                      )
-                                    }
-                                    className={`col-span-3 ${fieldErrors[field.uid] ? "border-destructive" : ""}`}
-                                    rows={3}
-                                    placeholder={
-                                      field.value ||
-                                      `Enter ${field.title.toLowerCase()}`
-                                    }
-                                  />
-                                ) : field.type === "calendar" || field.type === "date" ? (
-                                  <Input
-                                    id={field.uid}
-                                    type="date"
-                                    value={documentFields[field.uid] || ""}
-                                    onChange={(e) =>
-                                      handleFieldChange(
-                                        field.uid,
-                                        e.target.value
-                                      )
-                                    }
-                                    className={`col-span-3 ${fieldErrors[field.uid] ? "border-destructive" : ""}`}
-                                  />
-                                ) : field.type === "companies-house" ? (
-                                  <div className="col-span-3 flex flex-col gap-2">
-                                    <Input
-                                      id={field.uid}
-                                      value={documentFields[field.uid] || ""}
-                                      onChange={(e) =>
-                                        handleFieldChange(
-                                          field.uid,
-                                          e.target.value
-                                        )
-                                      }
-                                      className={fieldErrors[field.uid] ? "border-destructive" : ""}
-                                      placeholder={`Enter company name`}
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                      Company legally registered name
-                                    </p>
-                                  </div>
-                                ) : (
-                                  <Input
-                                    id={field.uid}
-                                    type={
-                                      field.type === "email" ? "email" : "text"
-                                    }
-                                    value={documentFields[field.uid] || ""}
-                                    onChange={(e) =>
-                                      handleFieldChange(
-                                        field.uid,
-                                        e.target.value
-                                      )
-                                    }
-                                    className={`col-span-3 ${fieldErrors[field.uid] ? "border-destructive" : ""}`}
-                                    placeholder={
-                                      field.value ||
-                                      `Enter ${field.title.toLowerCase()}`
-                                    }
-                                  />
-                                )}
-                                
-                                {fieldErrors[field.uid] && (
-                                  <div className="col-span-3 ml-auto">
-                                    <p className="text-xs text-destructive">
-                                      {fieldErrors[field.uid]}
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                          {fields.map(renderTemplateField)}
                         </div>
                       )
                     )}

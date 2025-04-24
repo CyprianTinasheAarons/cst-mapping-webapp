@@ -181,6 +181,14 @@ export const fetchHaloTickets = createAsyncThunk(
   }
 );
 
+export const fetchHaloTicketById = createAsyncThunk(
+  "halo/fetchTicketById",
+  async (ticketId: number) => {
+    const response = await HaloService.getHaloTicketById(ticketId);
+    return response.data;
+  }
+);
+
 interface HaloState {
   clients: any[];
   clientById: any | null;
@@ -188,6 +196,7 @@ interface HaloState {
   itemsForIngram: any[];
   contracts: any[];
   tickets: any[];
+  ticketById: any | null;
   currentItem: any | null;
   itemById: any | null;
   recurringInvoices: any[];
@@ -198,6 +207,7 @@ interface HaloState {
 const initialState: HaloState = {
   clients: [],
   clientById: null,
+  ticketById: null,
   items: [],
   itemsForIngram: [],
   itemById: null,
@@ -359,6 +369,17 @@ const haloSlice = createSlice({
         state.tickets = action.payload;
       })
       .addCase(fetchHaloTickets.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+      .addCase(fetchHaloTicketById.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(fetchHaloTicketById.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.ticketById = action.payload;
+      })
+      .addCase(fetchHaloTicketById.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message || null;
       });
