@@ -39,6 +39,8 @@ import {
   createJuroContract,
   sendContractForSigning,
   downloadContractPdf,
+  autofillContract,
+  clearAutofilledContract
 } from "@/slices/juro/juroSlice";
 import { fetchHaloTicketById } from "@/slices/halo/haloSlice";
 import { toast, ToastContainer } from "react-toastify";
@@ -52,6 +54,7 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
+  Bug
 } from "lucide-react";
 import Link from "next/link";
 
@@ -73,7 +76,26 @@ interface TemplateQuestion {
 
 export default function CreateDocumentPage() {
   const searchParams = useSearchParams();
-  const ticketId = searchParams.get("ticket_id");
+  const rawTicketId = searchParams.get("ticket_id");
+  
+  // Fix the ticket ID parsing to handle values like {0717670}
+  const ticketId = rawTicketId 
+    ? parseInt(rawTicketId.replace(/[{}]/g, '').replace(/^0+/, ''), 10) || null 
+    : null;
+  
+  const templateIdFromUrl = searchParams.get("template_id")
+    ? searchParams.get("template_id")?.replace(/[{}]/g, '')
+    : null;
+  
+  // Debug logger
+  const debugLog = useCallback((stage: string, data: any) => {
+    console.log(`[DEBUG:${stage}]`, data);
+    toast.info(`🐞 ${stage}: ${typeof data === 'object' ? JSON.stringify(data).substring(0, 50) + '...' : data}`, {
+      autoClose: 3000,
+      position: "bottom-right",
+      className: "debug-toast",
+    });
+  }, []);
   
   // Step tracking
   const [currentStep, setCurrentStep] = useState(1); // 1: Template Selection, 2: Form Filling
@@ -87,6 +109,7 @@ export default function CreateDocumentPage() {
   const [isSendingForSigning, setIsSendingForSigning] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isAddingToAllops, setIsAddingToAllops] = useState(false);
+  const [isAutofilling, setIsAutofilling] = useState(false);
   
   // State for the template selection
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -109,7 +132,11 @@ export default function CreateDocumentPage() {
   const [templateCache, setTemplateCache] = useState<Record<string, any>>({});
   
   const dispatch = useAppDispatch();
-  const { templates: juroTemplates, status: juroStatus } = useAppSelector((state) => state.juro);
+  const { 
+    templates: juroTemplates, 
+    status: juroStatus,
+    autofilledContract
+  } = useAppSelector((state) => state.juro);
   const { ticketById: detailedTicketData, status: haloStatus } = useAppSelector((state) => state.halo);
 
   // Helper function to get the associated question for a field
@@ -149,319 +176,221 @@ export default function CreateDocumentPage() {
     );
   }, [templateFields]);
 
-  // Process template details
-  const processTemplateDetails = useCallback((template: any) => {
-    console.log("Processing template:", template.name);
-
-    // Set template fields
-    setTemplateFields(template.fields || []);
-    setTemplateQuestions(template.questions || []);
-
-    // Create initial document fields based on template fields and ticket data
-    const initialFields: Record<string, string> = {};
-
-    // First, preserve all template default values
-    if (template.fields && Array.isArray(template.fields)) {
-      template.fields.forEach((field: TemplateField) => {
-        if (field.value !== undefined) {
-          initialFields[field.uid] = field.value;
-        }
-      });
-    }
-
-    // Add special fields required by Juro
-    initialFields.signatory_name = "Shane Thorne";
-    initialFields.signatory_email = "s.thorne@cst.co.uk";
-
-    // Handle counterparty_legal_name if it exists in template questions
-    if (detailedTicketData && template.questions && Array.isArray(template.questions)) {
-      const counterpartyLegalNameQuestion = template.questions.find(
-        (q: TemplateQuestion) => q.uid === "counterparty_legal_name"
-      );
-
-      if (counterpartyLegalNameQuestion) {
-        // Use oppcompanyname for the counterparty legal name
-        initialFields.counterparty_legal_name = detailedTicketData.oppcompanyname || "";
-      }
-    }
-
-    // Map ticket data to template fields - only override template defaults where we have ticket data
-    if (detailedTicketData && template.fields) {
-      // Map known field UIDs
-      template.fields.forEach((field: TemplateField) => {
-        switch (field.uid) {
-          // Term field - only override if no default
-          case "6128253a-93dc-4d83-b972-bb9497513843":
-            if (!initialFields[field.uid]) {
-              initialFields[field.uid] = "12-Month";
-            }
-            break;
-
-          // Counterparty Contact Name - use oppcontactname
-          case "73aa33aa-7469-41a4-9fff-76bb84a88fdd":
-            if (detailedTicketData.oppcontactname) {
-              initialFields[field.uid] = detailedTicketData.oppcontactname;
-            }
-            break;
-
-          // Counterparty Address
-          case "2b82a989-7eee-4783-a544-2acec331cc84":
-            if (detailedTicketData.oppaddr1) {
-              const address = [
-                detailedTicketData.oppaddr1,
-                detailedTicketData.oppaddr2,
-                detailedTicketData.oppaddr3,
-                detailedTicketData.oppaddr4,
-                detailedTicketData.opppostcode
-              ].filter(Boolean).join(", ");
-              
-              initialFields[field.uid] = address;
-            } else if (detailedTicketData.billing_address) {
-              const address = detailedTicketData.billing_address;
-              initialFields[field.uid] = [
-                address.line1,
-                address.line2,
-                address.line3,
-                address.line4,
-                address.postcode,
-              ].filter(Boolean).join(", ");
-            }
-            break;
-
-          // Counterparty Contact Email - use oppemailaddress
-          case "2fff3269-19c6-4d02-9c78-d04156991bfb":
-            if (detailedTicketData.oppemailaddress) {
-              initialFields[field.uid] = detailedTicketData.oppemailaddress;
-            }
-            break;
-
-          // Contract Reason - use oppreason
-          case "8de7e9ec-14dd-43cd-9367-7049c5f72a70":
-            if (detailedTicketData.oppreason) {
-              initialFields[field.uid] = detailedTicketData.oppreason;
-            }
-            break;
-
-          // Effective Date - use respondbydate if available
-          case "6e338014-47de-42c7-a816-88935e1b9d0c":
-            if (detailedTicketData.respondbydate) {
-              const date = new Date(detailedTicketData.respondbydate);
-              initialFields[field.uid] = date.toISOString().split("T")[0];
-            }
-            break;
-
-          // Quote Number - use ticket ID by default
-          case "9cea8342-725c-42c7-b50f-4ceb3425230a":
-            if (ticketId) {
-              initialFields[field.uid] = ticketId.replace(/[{}$]/g, '');
-            }
-            break;
-
-          // Delivery Date
-          case "4a46d105-0072-4a3f-9aa5-8bf7daa56cc6":
-            if (detailedTicketData.targetdate) {
-              const date = new Date(detailedTicketData.targetdate);
-              initialFields[field.uid] = date.toISOString().split("T")[0];
-            }
-            break;
-
-          // Expiration Date - use quote expiry if available or default to 1 month
-          case "af79c1b8-d4af-4bd3-80aa-c7103058a965":
-            if (detailedTicketData.deadlinedate) {
-              const date = new Date(detailedTicketData.deadlinedate);
-              initialFields[field.uid] = date.toISOString().split("T")[0];
-            }
-            break;
-
-          // Title (Counterparty) - use oppcustomertitle
-          case "df3b7695-0a0c-4081-9e7a-b902c87ede17":
-            if (detailedTicketData.oppcustomertitle) {
-              initialFields[field.uid] = detailedTicketData.oppcustomertitle;
-            }
-            break;
-
-          // Counterparty (Company) - use oppcompanyname
-          case "a50f21ec-0dd8-47dc-950b-15032103c63b":
-            if (detailedTicketData.oppcompanyname) {
-              initialFields[field.uid] = detailedTicketData.oppcompanyname;
-            }
-            break;
-
-          // Quote Value (Annual Value)
-          case "5e79b8a1-d41e-4c0f-b4e6-89f3a3c8e9d2":
-            if (detailedTicketData.oppvalue) {
-              initialFields[field.uid] = detailedTicketData.oppvalue.toString();
-            }
-            break;
-
-          default:
-            // We already set template defaults at the beginning, so only override if we have specific ticket data
-            const fieldTitle = field.title?.toLowerCase() || "";
-            if (fieldTitle.includes("counterparty") || fieldTitle.includes("client")) {
-              if (fieldTitle.includes("name") || fieldTitle.includes("company")) {
-                if (detailedTicketData.oppcompanyname) {
-                  initialFields[field.uid] = detailedTicketData.oppcompanyname;
-                }
-              } else if (fieldTitle.includes("address")) {
-                if (detailedTicketData.oppaddr1) {
-                  const address = [
-                    detailedTicketData.oppaddr1,
-                    detailedTicketData.oppaddr2,
-                    detailedTicketData.oppaddr3,
-                    detailedTicketData.oppaddr4,
-                    detailedTicketData.opppostcode
-                  ].filter(Boolean).join(", ");
-                  
-                  initialFields[field.uid] = address;
-                }
-              } else if (
-                fieldTitle.includes("email") ||
-                fieldTitle.includes("contact")
-              ) {
-                if (detailedTicketData.oppemailaddress) {
-                  initialFields[field.uid] = detailedTicketData.oppemailaddress;
-                }
-              } else if (
-                fieldTitle.includes("phone") ||
-                fieldTitle.includes("tel")
-              ) {
-                if (detailedTicketData.opptel) {
-                  initialFields[field.uid] = detailedTicketData.opptel;
-                }
-              } else if (
-                fieldTitle.includes("title") ||
-                fieldTitle.includes("position")
-              ) {
-                if (detailedTicketData.oppcustomertitle) {
-                  initialFields[field.uid] = detailedTicketData.oppcustomertitle;
-                }
-              } else if (
-                fieldTitle.includes("contact name") ||
-                fieldTitle.includes("representative")
-              ) {
-                if (detailedTicketData.oppcontactname) {
-                  initialFields[field.uid] = detailedTicketData.oppcontactname;
-                }
-              }
-            }
-            
-            // Map for customer/client definition in the definitions table
-            if (fieldTitle.includes("customer definition") || fieldTitle.includes("client definition")) {
-              if (detailedTicketData.oppcompanyname) {
-                initialFields[field.uid] = detailedTicketData.oppcompanyname;
-              }
-            }
-            
-            // Map for quote information table
-            if (fieldTitle.includes("quote") || fieldTitle.includes("proposal")) {
-              if (fieldTitle.includes("number") && ticketId) {
-                initialFields[field.uid] = ticketId.replace(/[{}$]/g, '');
-              } else if (fieldTitle.includes("value") || fieldTitle.includes("amount")) {
-                if (detailedTicketData.oppvalue) {
-                  initialFields[field.uid] = detailedTicketData.oppvalue.toString();
-                }
-              } else if (fieldTitle.includes("date")) {
-                if (detailedTicketData.respondbydate) {
-                  const date = new Date(detailedTicketData.respondbydate);
-                  initialFields[field.uid] = date.toISOString().split("T")[0];
-                }
-              }
-            }
-        }
-      });
-    }
-
-    // Set document title based on template and ticket
-    if (detailedTicketData) {
-      setDocumentTitle(`${template.name} - ${detailedTicketData.oppcompanyname || detailedTicketData.client_name || 'Unknown Company'}`);
-    }
-
-    console.log("Initialized document fields:", initialFields);
-    setDocumentFields(initialFields);
-  }, [detailedTicketData, ticketId]);
-
-  // Process ticket data and handle validation
-  const validateFields = () => {
-    const errors: string[] = [];
-    const fieldErrorsMap: Record<string, string> = {};
-
-    // Check for required fields
-    templateQuestions.forEach((question) => {
-      if (question.isRequired) {
-        const field = templateFields.find((f) => f.uid === question.fieldUid);
-        
-        if (field) {
-          const value = documentFields[field.uid];
-          if (!value || value.trim() === '') {
-            errors.push(`${field.title} is required`);
-            fieldErrorsMap[field.uid] = 'This field is required';
-          }
-        }
-      }
-    });
-
-    // Set validation errors
-    setValidationErrors(errors);
-    setFieldErrors(fieldErrorsMap);
-
-    return errors.length === 0;
-  };
-
-  // Load ticket data - handle numeric value and string format
-  useEffect(() => {
-    if (ticketId) {
-      // Clean up ticket ID if it contains template placeholders
-      const parsedId = ticketId.replace(/[{}$]/g, '');
-      
-      // Check if it's a valid numeric ID
-      if (/^\d+$/.test(parsedId)) {
-        setIsTicketLoading(true);
-        dispatch(fetchHaloTicketById(parseInt(parsedId)))
-          .unwrap()
-          .then(() => {
-            setIsTicketLoading(false);
-          })
-          .catch((error) => {
-            toast.error(`Error loading ticket data: ${error.message || 'Unknown error'}`);
-            setIsTicketLoading(false);
-          });
-      } else {
-        // Handle case where ticket ID is not a valid number
-        toast.warning('Please provide a valid ticket ID in the URL');
-        setIsTicketLoading(false);
-      }
-    } else {
-      setIsTicketLoading(false);
-    }
-  }, [ticketId, dispatch]);
-
-  // Load template details
+  // Simplify the loadTemplateDetails function
   const loadTemplateDetails = useCallback((templateId: string) => {
-    // Check if template is already cached
+    setIsLoadingTemplate(true);
+    debugLog("Loading Template", `Template ID: ${templateId}`);
+    
+    // If we already have the template in cache, use it
     if (templateCache[templateId]) {
+      debugLog("Template Cache Hit", `Using cached template: ${templateId}`);
       console.log(`Using cached template: ${templateId}`);
-      processTemplateDetails(templateCache[templateId]);
+      // Only set basic template structure - autofill will handle the values
+      setTemplateFields(templateCache[templateId].fields || []);
+      setTemplateQuestions(templateCache[templateId].questions || []);
+      setIsLoadingTemplate(false);
       return;
     }
 
-    setIsLoadingTemplate(true);
+    // Fetch the template from the API
+    debugLog("Template API Call", `Fetching template: ${templateId}`);
     dispatch(fetchJuroTemplate(templateId))
       .unwrap()
       .then((template) => {
-        // Cache the template
-        setTemplateCache(prev => ({
+        debugLog("Template Loaded", `Template name: ${template.name}`);
+        // Cache the template for future use
+        setTemplateCache((prev) => ({
           ...prev,
-          [templateId]: template
+          [templateId]: template,
         }));
-        processTemplateDetails(template);
+        
+        // Only set basic template structure - autofill will handle the values
+        setTemplateFields(template.fields || []);
+        setTemplateQuestions(template.questions || []);
         setIsLoadingTemplate(false);
       })
       .catch((error) => {
         console.error(`Error loading template ${templateId}:`, error);
-        toast.error("Failed to load template details.");
+        debugLog("Template Error", `Failed to load template: ${error.message || JSON.stringify(error)}`);
+        toast.error("Failed to load template details");
         setIsLoadingTemplate(false);
       });
-  }, [templateCache, dispatch, processTemplateDetails]);
+  }, [dispatch, templateCache, debugLog]);
+
+  // Create a shared function for autofill logic to avoid duplication
+  const performAutofill = useCallback((templateId: string) => {
+    if (!templateId || !ticketId) {
+      debugLog("Autofill Failed", `Missing data - Template ID: ${templateId}, Ticket ID: ${ticketId}`);
+      return Promise.reject("Missing template ID or ticket ID");
+    }
+    
+    setIsLoadingTemplate(true);
+    setIsAutofilling(true);
+    debugLog("Autofill Started", `Template: ${templateId}, Ticket: ${ticketId}`);
+    
+    // Clear any previous autofilled data
+    dispatch(clearAutofilledContract());
+    
+    const autofillData = {
+      template_id: templateId,
+      ticket_id: ticketId
+    };
+    
+    debugLog("Autofill Dispatch", autofillData);
+    // Use the autofill function to intelligently populate fields
+    return dispatch(autofillContract(autofillData))
+      .unwrap()
+      .then(result => {
+        if (result) {
+          debugLog("Autofill Success", `Fields count: ${result.fields?.length || 0}`);
+          console.log("Autofill completed successfully:", result);
+          toast.success("Successfully auto-filled template with ticket data");
+          
+          // Set document title based on template name
+          setDocumentTitle(`${result.name || 'Contract'} - ${detailedTicketData?.oppcompanyname || 'Client'}`);
+          
+          // Extract fields from the autofilled contract
+          if (result.fields) {
+            setTemplateFields(result.fields);
+            
+            // Convert fields to documentFields format
+            const newDocumentFields: Record<string, string> = {};
+            result.fields.forEach((field: TemplateField) => {
+              if (field.value !== undefined) {
+                newDocumentFields[field.uid] = field.value;
+              }
+            });
+            setDocumentFields(newDocumentFields);
+          }
+          
+          // Extract questions
+          if (result.questions) {
+            setTemplateQuestions(result.questions);
+          }
+          
+          // Move to next step
+          setCurrentStep(2);
+          return result;
+        }
+        debugLog("Autofill Empty", "No result data received");
+        toast.warn("Auto-fill completed but no data was returned");
+        return null;
+      })
+      .catch(error => {
+        console.error("Error auto-filling template:", error);
+        debugLog("Autofill Error", `${error.message || JSON.stringify(error)}`);
+        toast.error("Failed to auto-fill template with ticket data.");
+        
+        // Fall back to regular template loading
+        loadTemplateDetails(templateId);
+        throw error;
+      })
+      .finally(() => {
+        setIsLoadingTemplate(false);
+        setIsAutofilling(false);
+      });
+  }, [ticketId, detailedTicketData, dispatch, loadTemplateDetails, debugLog]);
+
+  // Process template selection with autofill - use the shared function
+  const handleTemplateSelection = useCallback((templateId: string) => {
+    setSelectedTemplate(templateId);
+    debugLog("Template Selected", templateId);
+    
+    if (!templateId) {
+      debugLog("Template Selection Cancelled", "No template selected");
+      setCurrentStep(1);
+      return;
+    }
+    
+    // Check if ticketId is valid before trying to use it
+    if (ticketId) {
+      debugLog("Ticket Found", `Will try autofill with template ${templateId} and ticket ${ticketId}`);
+      toast.info(`Starting autofill for template ${templateId} with ticket ${ticketId}`);
+      performAutofill(templateId).catch(err => {
+        debugLog("Template Selection Error", `Failed to handle template selection: ${err.message || JSON.stringify(err)}`);
+        console.error("Failed to handle template selection:", err);
+      });
+    } else {
+      debugLog("No Ticket ID for Autofill", `Ticket value: ${rawTicketId} parsed to ${ticketId}`);
+      toast.warning("No valid ticket ID found. Autofill cannot be performed.");
+      // If no ticket ID is provided, load the template details normally
+      loadTemplateDetails(templateId);
+    }
+  }, [ticketId, rawTicketId, performAutofill, loadTemplateDetails, debugLog]);
+
+  // Auto-select template and autofill if template_id is provided in URL
+  useEffect(() => {
+    debugLog("URL Params Check", {
+      templateIdFromUrl,
+      ticketId,
+      hasDetailedTicketData: !!detailedTicketData,
+      allConditionsMet: !!(templateIdFromUrl && ticketId && detailedTicketData)
+    });
+    
+    if (templateIdFromUrl && ticketId && detailedTicketData) {
+      debugLog("URL Params", `Template: ${templateIdFromUrl}, Ticket: ${ticketId}`);
+      setSelectedTemplate(templateIdFromUrl);
+      toast.info(`Auto-selecting template ${templateIdFromUrl} from URL`);
+      performAutofill(templateIdFromUrl).catch(err => {
+        debugLog("Autofill Error on Page Load", `Failed to auto-fill on page load: ${err.message || JSON.stringify(err)}`);
+        console.error("Failed to auto-fill on page load:", err);
+      });
+    } else {
+      // Log why autofill wasn't triggered from URL
+      const missingParams = [];
+      if (!templateIdFromUrl) missingParams.push("template ID");
+      if (!ticketId) missingParams.push("ticket ID");
+      if (!detailedTicketData) missingParams.push("ticket data");
+      
+      if (missingParams.length > 0) {
+        debugLog("Autofill Not Triggered", `Missing: ${missingParams.join(", ")}`);
+      }
+    }
+  }, [templateIdFromUrl, ticketId, detailedTicketData, performAutofill, debugLog]);
+
+  // Initial data loading
+  useEffect(() => {
+    debugLog("Initial Load", `Page initialized with URL params: ${window.location.search}`);
+    debugLog("Raw Ticket ID", `Value: "${rawTicketId}", Type: ${typeof rawTicketId}`);
+    debugLog("Parsed Ticket ID", `Value: ${ticketId}, Type: ${typeof ticketId}`);
+    
+    if (ticketId) {
+      setIsTicketLoading(true);
+      debugLog("Fetching Ticket", `Ticket ID: ${ticketId}`);
+      dispatch(fetchHaloTicketById(ticketId))
+        .unwrap()
+        .then((data) => {
+          debugLog("Ticket Loaded", `Company: ${data?.oppcompanyname}`);
+          setIsTicketLoading(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching ticket:", error);
+          debugLog("Ticket Error", `Failed to fetch ticket: ${error.message || JSON.stringify(error)}`);
+          toast.error("Error loading ticket details");
+          setIsTicketLoading(false);
+        });
+    } else {
+      debugLog("No Ticket ID", "Skipping ticket fetch");
+      setIsTicketLoading(false);
+    }
+
+    setIsTemplatesLoading(true);
+    debugLog("Fetching Templates", "Loading available document templates");
+    dispatch(fetchJuroTemplates())
+      .unwrap()
+      .then((templates) => {
+        debugLog("Templates Loaded", `Count: ${templates?.length || 0}`);
+        setIsTemplatesLoading(false);
+      })
+      .catch((error) => {
+        console.error("Error fetching templates:", error);
+        debugLog("Template List Error", `Failed to fetch templates: ${error.message || JSON.stringify(error)}`);
+        toast.error("Error loading document templates");
+        setIsTemplatesLoading(false);
+      });
+      
+    setIsPageLoading(false);
+  }, [dispatch, ticketId, rawTicketId, debugLog]);
 
   // Handle field change
   const handleFieldChange = (fieldId: string, value: string) => {
@@ -491,162 +420,136 @@ export default function CreateDocumentPage() {
     }
   };
 
-  // Handle template selection
-  const handleSelectedTemplateChange = (templateId: string) => {
-    setSelectedTemplate(templateId);
+  // Remove any hardcoded field handling in validateFields
+  const validateFields = useCallback(() => {
+    const errors: string[] = [];
+    const fieldErrors: Record<string, string> = {};
     
-    // Clear any existing fields to prevent potential state conflicts
-    setTemplateFields([]);
-    setTemplateQuestions([]);
-    setDocumentFields({});
+    // Validate required fields
+    templateQuestions.forEach(question => {
+      if (question.isRequired && question.fieldUid) {
+        const fieldValue = documentFields[question.fieldUid];
+        if (!fieldValue) {
+          const field = templateFields.find(f => f.uid === question.fieldUid);
+          const fieldName = field?.title || question.title || 'Unknown field';
+          errors.push(`${fieldName} is required`);
+          fieldErrors[question.fieldUid] = 'This field is required';
+        }
+      }
+    });
     
-    // Reset validation state
-    setValidationErrors([]);
-    setFieldErrors({});
+    // Also check special fields that are always required
+    const requiredSpecialFields = ['signatory_name', 'signatory_email'];
+    requiredSpecialFields.forEach(fieldUid => {
+      if (!documentFields[fieldUid]) {
+        errors.push(`${fieldUid.replace('_', ' ')} is required`);
+        fieldErrors[fieldUid] = 'This field is required';
+      }
+    });
     
-    if (templateId) {
-      // Move to step 2 when a template is selected
-      setCurrentStep(2);
-      // Load details after state has been reset
-      loadTemplateDetails(templateId);
-    }
-  };
+    setValidationErrors(errors);
+    setFieldErrors(fieldErrors);
+    
+    return errors.length === 0;
+  }, [documentFields, templateFields, templateQuestions]);
 
-  // Load templates
-  useEffect(() => {
-    setIsTemplatesLoading(true);
-    dispatch(fetchJuroTemplates())
-      .unwrap()
-      .then(() => {
-        setIsTemplatesLoading(false);
-        setIsPageLoading(false);
-      })
-      .catch((error) => {
-        console.error("Error loading templates:", error);
-        toast.error("Failed to load templates.");
-        setIsTemplatesLoading(false);
-        setIsPageLoading(false);
-      });
-  }, [dispatch]);
-
-  // Overall page loading state
-  useEffect(() => {
-    if (!isTicketLoading && !isTemplatesLoading) {
-      setIsPageLoading(false);
-    }
-  }, [isTicketLoading, isTemplatesLoading]);
-
-  const handleCreateDocument = async () => {
+  // Create the contract with proper data
+  const createContract = useCallback(() => {
     if (!validateFields()) {
+      debugLog("Validation Failed", `Errors: ${validationErrors.join(', ')}`);
+      toast.error("Please fix the validation errors before creating the document");
       return;
     }
 
     setIsCreatingDocument(true);
+    debugLog("Creating Document", `Template: ${selectedTemplate}, Fields: ${Object.keys(documentFields).length}`);
+    
+    // Use JuroContractCreator to generate the proper payload
+    const contractData = JuroContractCreator.createContractPayload(
+      selectedTemplate,
+      documentTitle,
+      documentFields,
+      templateFields,
+      templateQuestions,
+      detailedTicketData // Using ticket data as the selected client
+    );
 
-    try {
-      // Use the helper to create a contract with proper signing side handling
-      const requestData = JuroContractCreator.createContractPayload(
-        selectedTemplate,
-        documentTitle,
-        documentFields,
-        templateFields,
-        templateQuestions,
-        detailedTicketData
-      );
-
-      const contract = await dispatch(createJuroContract(requestData)).unwrap();
-      
-      if (contract && contract.id) {
-        setCreatedDocumentId(contract.id.toString());
+    debugLog("Contract Data", contractData);
+    
+    dispatch(createJuroContract(contractData))
+      .unwrap()
+      .then((data) => {
+        debugLog("Document Created", `Document ID: ${data.id}`);
+        setCreatedDocumentId(data.id);
         setDocumentCreated(true);
-        
-        // Generate document URL
-        const documentUrl = `https://app.juro.com/sign/${contract.id}`;
-        setDocumentUrl(documentUrl);
-        
         setShowSuccessDialog(true);
+        setDocumentUrl(data.viewUrl || '');
         toast.success("Document created successfully!");
-      } else {
-        toast.error("Failed to create document: No ID returned");
-      }
-    } catch (error: any) {
-      console.error("Error creating document:", error);
-      
-      if (error.response && error.response.data) {
-        const errorMessage = error.response.data.detail || 
-                            error.response.data.message || 
-                            "Unknown error";
+      })
+      .catch((error) => {
+        const errorMessage = error.message || "Unknown error";
+        debugLog("Document Creation Error", errorMessage);
+        console.error("Error creating document:", error);
         toast.error(`Failed to create document: ${errorMessage}`);
-      } else {
-        toast.error(`Failed to create document: ${error.message || "Unknown error"}`);
-      }
-    } finally {
-      setIsCreatingDocument(false);
-    }
-  };
+      })
+      .finally(() => {
+        setIsCreatingDocument(false);
+      });
+  }, [
+    validateFields, 
+    validationErrors, 
+    selectedTemplate, 
+    documentFields, 
+    documentTitle, 
+    templateFields,
+    templateQuestions,
+    detailedTicketData,
+    dispatch,
+    debugLog
+  ]);
 
+  // Handle send for signing
   const handleSendForSigning = async () => {
     if (!createdDocumentId) {
-      toast.error("Please create the document first");
+      toast.error("No document ID found. Please create a document first.");
       return;
     }
 
     setIsSendingForSigning(true);
-
     try {
-      // Use the helper to create a signing request
+      // Use JuroContractCreator to create the signing request payload
       const signingData = JuroContractCreator.createSigningRequest(
         documentFields,
         templateFields,
-        detailedTicketData,
-        detailedTicketData,
+        detailedTicketData, // As the selected client
+        detailedTicketData, // As detailed client data
         selectedSignatureProvider
       );
 
-      // Check that we have an email and name
-      if (!signingData.recipients[0].email) {
-        toast.error(
-          "No client email address found. Please provide an email address for signing."
-        );
-        return;
-      }
-
-      if (!signingData.recipients[0].name) {
-        toast.error(
-          "No client name found. Please provide a name for the signatory."
-        );
-        return;
-      }
-
-      const signingResult = await dispatch(
+      debugLog("Sending for Signing", signingData);
+      
+      // We need to use the specific signing UID - using the constant from JuroContractCreator
+      const signingUid = JuroContractCreator.COUNTERPARTY_SIDE_UID;
+      
+      const result = await dispatch(
         sendContractForSigning({
           contractId: createdDocumentId,
-          signingUid: "primary",
-          data: signingData,
+          signingUid,
+          data: signingData
         })
       ).unwrap();
 
-      if (signingResult) {
-        toast.success(
-          `Document "${documentTitle}" sent for signing to ${signingData.recipients[0].email}`
-        );
-      }
+      toast.success("Document sent for signing!");
+      debugLog("Sent for Signing", result);
     } catch (error: any) {
-      console.error("Error sending document for signing:", error);
-      
-      if (error.response && error.response.data) {
-        const errorMessage = error.response.data.detail || 
-                            error.response.data.message || 
-                            "Unknown error";
-        toast.error(`Failed to send for signing: ${errorMessage}`);
-      } else {
-        toast.error(`Failed to send for signing: ${error.message || "Unknown error"}`);
-      }
+      toast.error(`Failed to send for signing: ${error.message || "Unknown error"}`);
+      debugLog("Signing Error", error);
     } finally {
       setIsSendingForSigning(false);
     }
   };
 
+  // Handle download document
   const handleDownloadDocument = async () => {
     if (!createdDocumentId) {
       toast.error("Please create the document first");
@@ -678,6 +581,7 @@ export default function CreateDocumentPage() {
     }
   };
 
+  // Handle add to Allops
   const handleAddToAllops = async () => {
     if (!createdDocumentId || !documentTitle || !detailedTicketData) {
       toast.error("Missing required information to add to Allops");
@@ -697,109 +601,228 @@ export default function CreateDocumentPage() {
     }
   };
 
+  // Render template field
   const renderTemplateField = useCallback((field: TemplateField) => {
     const question = getQuestionForField(field.uid);
     const hasError = fieldErrors[field.uid] !== undefined;
     // Create default placeholder text instead of using field.placeholder which doesn't exist
     const placeholderText = `Enter ${field.title.toLowerCase()}`;
+    
+    // Determine if field is related to specific categories for styling
+    const isClientField = field.title.toLowerCase().includes('client') || 
+                         field.title.toLowerCase().includes('counterparty') || 
+                         field.title.toLowerCase().includes('customer');
+    const isCompanyField = field.title.toLowerCase().includes('company') || 
+                          field.title.toLowerCase().includes('cst') || 
+                          field.title.toLowerCase().includes('organization');
+    const isDateField = field.type === 'date' || field.title.toLowerCase().includes('date');
+    const isSignatoryField = field.title.toLowerCase().includes('signatory') || 
+                            field.title.toLowerCase().includes('signing') || 
+                            field.title.toLowerCase().includes('signature');
+    const isEmailField = field.title.toLowerCase().includes('email');
+    const isMonetaryField = field.title.toLowerCase().includes('price') || 
+                           field.title.toLowerCase().includes('cost') ||
+                           field.title.toLowerCase().includes('fee') ||
+                           field.title.toLowerCase().includes('amount') ||
+                           field.title.toLowerCase().includes('value');
+    
+    // Determine field styling based on category
+    const fieldStyle = isClientField ? 'border-l-4 border-l-blue-400 pl-2' :
+                      isCompanyField ? 'border-l-4 border-l-purple-400 pl-2' :
+                      isSignatoryField ? 'border-l-4 border-l-amber-400 pl-2' :
+                      isDateField ? 'border-l-4 border-l-green-400 pl-2' :
+                      '';
 
     return (
-      <div key={field.uid} className="grid grid-cols-4 items-start gap-4 mb-4">
-        <div className="text-right">
-          <Label htmlFor={field.uid} className="capitalize">
+      <div key={field.uid} className={`mb-6 rounded-md p-3 transition-colors ${hasError ? 'bg-red-50' : 'hover:bg-slate-50'} ${fieldStyle}`}>
+        <div className="flex flex-col space-y-1.5 mb-2">
+          <Label htmlFor={field.uid} className="text-md font-medium flex items-center">
             {field.title}
-            {question?.isRequired && <span className="text-red-500">*</span>}
+            {question?.isRequired && <span className="text-red-500 ml-1">*</span>}
+            {isClientField && <Badge variant="outline" className="ml-2 bg-blue-50">Client</Badge>}
+            {isCompanyField && <Badge variant="outline" className="ml-2 bg-purple-50">Company</Badge>}
+            {isSignatoryField && <Badge variant="outline" className="ml-2 bg-amber-50">Signatory</Badge>}
           </Label>
           {question?.text && (
-            <p className="text-xs text-muted-foreground mt-1">{question.text}</p>
+            <p className="text-sm text-muted-foreground">{question.text}</p>
           )}
         </div>
-        <div className="col-span-3">
+        <div>
           {field.type === 'textarea' ? (
             <Textarea
               id={field.uid}
               value={documentFields[field.uid] || ''}
               onChange={(e) => handleFieldChange(field.uid, e.target.value)}
-              className={hasError ? 'border-red-500' : ''}
+              className={`w-full ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
               placeholder={placeholderText}
               rows={4}
             />
-          ) : field.type === 'date' || field.title.toLowerCase().includes('date') ? (
-            <Input
-              id={field.uid}
-              type="date"
-              value={documentFields[field.uid] || ''}
-              onChange={(e) => handleFieldChange(field.uid, e.target.value)}
-              className={hasError ? 'border-red-500' : ''}
-            />
+          ) : isDateField ? (
+            <div className="relative">
+              <Input
+                id={field.uid}
+                type="date"
+                value={documentFields[field.uid] || ''}
+                onChange={(e) => handleFieldChange(field.uid, e.target.value)}
+                className={`w-full ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+              />
+            </div>
           ) : field.title.toLowerCase().includes('companies house') ? (
             <div>
+              <div className="relative">
+                <Input
+                  id={field.uid}
+                  type="text"
+                  value={documentFields[field.uid] || ''}
+                  onChange={(e) => handleFieldChange(field.uid, e.target.value)}
+                  className={`w-full ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                  placeholder="Enter company number"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Find on <a href="https://find-and-update.company-information.service.gov.uk/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Companies House</a>
+              </p>
+            </div>
+          ) : isEmailField ? (
+            <div className="relative">
+              <Input
+                id={field.uid}
+                type="email"
+                value={documentFields[field.uid] || ''}
+                onChange={(e) => handleFieldChange(field.uid, e.target.value)}
+                className={`w-full ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                placeholder="email@example.com"
+              />
+            </div>
+          ) : isMonetaryField ? (
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">£</span>
               <Input
                 id={field.uid}
                 type="text"
                 value={documentFields[field.uid] || ''}
                 onChange={(e) => handleFieldChange(field.uid, e.target.value)}
-                className={hasError ? 'border-red-500' : ''}
-                placeholder="Enter company number"
+                className={`w-full pl-7 ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                placeholder={placeholderText}
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Find on <a href="https://find-and-update.company-information.service.gov.uk/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Companies House</a>
-              </p>
             </div>
-          ) : field.title.toLowerCase().includes('email') ? (
-            <Input
-              id={field.uid}
-              type="email"
-              value={documentFields[field.uid] || ''}
-              onChange={(e) => handleFieldChange(field.uid, e.target.value)}
-              className={hasError ? 'border-red-500' : ''}
-              placeholder="email@example.com"
-            />
           ) : (
-            <Input
-              id={field.uid}
-              type="text"
-              value={documentFields[field.uid] || ''}
-              onChange={(e) => handleFieldChange(field.uid, e.target.value)}
-              className={hasError ? 'border-red-500' : ''}
-              placeholder={placeholderText}
-            />
+            <div className="relative">
+              <Input
+                id={field.uid}
+                type="text"
+                value={documentFields[field.uid] || ''}
+                onChange={(e) => handleFieldChange(field.uid, e.target.value)}
+                className={`w-full ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                placeholder={placeholderText}
+              />
+            </div>
           )}
           {hasError && (
-            <p className="text-red-500 text-xs mt-1">{fieldErrors[field.uid]}</p>
+            <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors[field.uid]}</p>
           )}
         </div>
       </div>
     );
   }, [documentFields, fieldErrors, getQuestionForField]);
+  
+  // Group and render fields by category for better organization
+  const renderFieldsByGroups = useCallback(() => {
+    const groupedFields = groupFieldsByCategory();
+    
+    return (
+      <div className="space-y-8">
+        {Object.entries(groupedFields).map(([category, fields]) => (
+          <div key={category} className="space-y-3">
+            <h3 className="text-lg font-semibold capitalize mb-4 border-b pb-2">
+              {category === 'client' && 'Client Information'}
+              {category === 'company' && 'Company Information'}
+              {category === 'contract' && 'Contract Details'}
+              {category === 'signatory' && 'Signatory Information'}
+              {category === 'other' && 'Additional Information'}
+            </h3>
+            <div className="space-y-1">
+              {fields.map(field => renderTemplateField(field))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }, [groupFieldsByCategory, renderTemplateField]);
+  
+  // Load templates
+  useEffect(() => {
+    setIsTemplatesLoading(true);
+    dispatch(fetchJuroTemplates())
+      .unwrap()
+      .then(() => {
+        setIsTemplatesLoading(false);
+        setIsPageLoading(false);
+      })
+      .catch((error) => {
+        console.error("Error loading templates:", error);
+        toast.error("Failed to load templates.");
+        setIsTemplatesLoading(false);
+        setIsPageLoading(false);
+      });
+  }, [dispatch]);
+
+  // Overall page loading state
+  useEffect(() => {
+    if (!isTicketLoading && !isTemplatesLoading) {
+      setIsPageLoading(false);
+    }
+  }, [isTicketLoading, isTemplatesLoading]);
 
   return (
     <div className="container max-w-5xl py-10">
       <ToastContainer position="top-right" autoClose={5000} />
       
-      {/* Back button */}
-      <div className="mb-6">
-        <Link href="/juro" className="flex items-center text-sm text-muted-foreground hover:text-primary">
-          <ArrowLeft className="w-4 h-4 mr-1" /> Back to Juro Dashboard
-        </Link>
+      {/* Debug Status Bar */}
+      <div className="bg-slate-100 p-2 mb-4 rounded-md text-xs">
+        <div className="flex flex-wrap gap-2">
+          <Badge variant={isPageLoading ? "destructive" : "secondary"} className="py-1">
+            Page: {isPageLoading ? 'Loading' : 'Ready'}
+          </Badge>
+          <Badge variant={isTicketLoading ? "destructive" : ticketId ? "secondary" : "outline"} className="py-1">
+            Ticket: {isTicketLoading ? 'Loading' : ticketId ? `#${ticketId}` : 'No Ticket'}
+          </Badge>
+          <Badge variant={isTemplatesLoading ? "destructive" : "secondary"} className="py-1">
+            Templates: {isTemplatesLoading ? 'Loading' : `${juroTemplates.length} Available`}
+          </Badge>
+          <Badge variant={isLoadingTemplate ? "destructive" : "default"} className="py-1">
+            Template: {isLoadingTemplate ? 'Loading' : selectedTemplate ? 'Selected' : 'None'}
+          </Badge>
+          <Badge variant={isAutofilling ? "destructive" : autofilledContract ? "secondary" : "default"} className="py-1">
+            Autofill: {isAutofilling ? 'In Progress' : autofilledContract ? 'Complete' : 'Not Started'}
+          </Badge>
+          <Badge variant={isCreatingDocument ? "destructive" : documentCreated ? "secondary" : "default"} className="py-1">
+            Document: {isCreatingDocument ? 'Creating' : documentCreated ? 'Created' : 'Not Created'}
+          </Badge>
+        </div>
+        <div className="mt-2">
+          <p className="font-mono">URL Params: {JSON.stringify({templateId: templateIdFromUrl, ticketId: rawTicketId})}</p>
+        </div>
       </div>
-      
-      <h1 className="text-2xl font-bold mb-6">Create Document</h1>
-      
-      {/* Loading indicator for the whole page */}
+
       {isPageLoading ? (
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="flex items-center space-x-2 mb-4">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            <span className="text-lg">Loading...</span>
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="text-center">
+            <Loader2 className="h-10 w-10 animate-spin mx-auto text-primary" />
+            <p className="mt-4 text-lg">Loading document creator...</p>
           </div>
-          <p className="text-muted-foreground text-center">
-            {isTicketLoading && "Loading ticket data..."}
-            {isTemplatesLoading && "Loading templates..."}
-          </p>
         </div>
       ) : (
         <>
+          {/* Back button */}
+          <div className="mb-6">
+            <Link href="/juro" className="flex items-center text-sm text-muted-foreground hover:text-primary">
+              <ArrowLeft className="w-4 h-4 mr-1" /> Back to Juro Dashboard
+            </Link>
+          </div>
+          
+          <h1 className="text-2xl font-bold mb-6">Create Document</h1>
+          
           {/* Ticket Information Banner */}
           {detailedTicketData && (
             <Alert className="mb-6">
@@ -859,7 +882,7 @@ export default function CreateDocumentPage() {
                             ? 'border-primary bg-primary/5' 
                             : 'hover:border-primary/50'
                         }`}
-                        onClick={() => handleSelectedTemplateChange(template.id)}
+                        onClick={() => handleTemplateSelection(template.id)}
                       >
                         <div className="flex items-start justify-between">
                           <div>
@@ -901,223 +924,106 @@ export default function CreateDocumentPage() {
             </Card>
           )}
           
-          {/* Step 2: Document Form */}
+          {/* Step 2: Form Filling */}
           {currentStep === 2 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Step 2: Fill Document Details</CardTitle>
-                <CardDescription>
-                  Fill in the required information for your document
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {validationErrors.length > 0 && (
-                  <Alert variant="destructive" className="mb-6">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Validation Errors</AlertTitle>
-                    <AlertDescription>
-                      <ul className="list-disc pl-5 mt-2">
-                        {validationErrors.map((error, index) => (
-                          <li key={index}>{error}</li>
-                        ))}
-                      </ul>
-                    </AlertDescription>
-                  </Alert>
-                )}
-                
-                {isLoadingTemplate ? (
-                  <div className="space-y-6 animate-pulse">
-                    <div className="space-y-2">
-                      <div className="h-5 bg-gray-200 rounded w-32"></div>
-                      <div className="h-10 bg-gray-100 rounded w-full"></div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-5 bg-gray-200 rounded w-40"></div>
-                      <div className="h-20 bg-gray-100 rounded w-full"></div>
-                    </div>
-                    <div className="border-t pt-6">
-                      <div className="h-6 bg-gray-200 rounded w-36 mb-4"></div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {[1, 2, 3, 4].map((i) => (
-                          <div key={i} className="space-y-2">
-                            <div className="h-5 bg-gray-200 rounded w-32"></div>
-                            <div className="h-10 bg-gray-100 rounded w-full"></div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="border rounded-md p-4">
-                      <h3 className="text-sm font-medium mb-3">
-                        Document Information
-                      </h3>
-                      <div className="grid grid-cols-4 items-center gap-4 mb-2">
-                        <Label 
-                          htmlFor="document-title" 
-                          className={`text-right ${fieldErrors["document-title"] ? "text-destructive" : ""}`}
-                        >
-                          Document Title
-                          {fieldErrors["document-title"] ? (
-                            <span className="text-destructive">*</span>
-                          ) : (
-                            <span className="text-red-500">*</span>
-                          )}
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Document Information</CardTitle>
+                  <CardDescription>Enter the basic information for your document</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="grid gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="document-title" className="text-base font-medium">
+                          Document Title <span className="text-red-500">*</span>
                         </Label>
                         <Input
                           id="document-title"
                           placeholder="Enter document title"
                           value={documentTitle}
                           onChange={(e) => handleTitleChange(e.target.value)}
-                          className={`col-span-3 ${fieldErrors["document-title"] ? "border-destructive" : ""}`}
+                          className={fieldErrors["document-title"] ? "border-red-500 ring-1 ring-red-500" : ""}
                         />
+                        {fieldErrors["document-title"] && (
+                          <p className="text-red-500 text-xs">{fieldErrors["document-title"]}</p>
+                        )}
                       </div>
-                      {fieldErrors["document-title"] && (
-                        <div className="grid grid-cols-4 gap-4">
-                          <div></div>
-                          <p className="text-xs text-destructive col-span-3">
-                            {fieldErrors["document-title"]}
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-4 items-center gap-4 mt-3">
-                        <Label htmlFor="document-description" className="text-right">
-                          Description
-                        </Label>
+                      <div className="space-y-2">
+                        <Label htmlFor="document-description" className="text-base font-medium">Description</Label>
                         <Textarea
                           id="document-description"
-                          placeholder="Enter document description"
+                          placeholder="Enter document description (optional)"
                           value={documentDescription}
                           onChange={(e) => setDocumentDescription(e.target.value)}
-                          className="col-span-3"
                           rows={2}
                         />
                       </div>
                     </div>
-                    
-                    {/* Display special questions that don't have field mappings */}
-                    {templateQuestions.filter(
-                      (q) =>
-                        !q.fieldUid &&
-                        !["signatory_name", "signatory_email"].includes(q.uid)
-                    ).length > 0 && (
-                      <div className="border rounded-md p-4">
-                        <h3 className="text-sm font-medium mb-3">
-                          Document Questions
-                        </h3>
-                        {templateQuestions
-                          .filter(
-                            (q) =>
-                              !q.fieldUid &&
-                              !["signatory_name", "signatory_email"].includes(
-                                q.uid
-                              )
-                          )
-                          .map((question) => (
-                            <div
-                              key={question.uid}
-                              className="grid grid-cols-4 items-start gap-4 mb-4"
-                            >
-                              <div className="text-right">
-                                <Label
-                                  htmlFor={question.uid}
-                                  className={`capitalize ${fieldErrors[question.uid] ? "text-destructive" : ""}`}
-                                >
-                                  {question.title}
-                                  {question.isRequired && (
-                                    <span className={fieldErrors[question.uid] ? "text-destructive" : "text-red-500"}>*</span>
-                                  )}
-                                </Label>
-                                {question.text && (
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    {question.text}
-                                  </p>
-                                )}
-                              </div>
-                              <Input
-                                id={question.uid}
-                                value={documentFields[question.uid] || ""}
-                                onChange={(e) =>
-                                  handleFieldChange(question.uid, e.target.value)
-                                }
-                                className={`col-span-3 ${fieldErrors[question.uid] ? "border-destructive" : ""}`}
-                                placeholder={`Enter ${question.title.toLowerCase()}`}
-                              />
-                              {fieldErrors[question.uid] && (
-                                <div className="col-span-3 ml-auto">
-                                  <p className="text-xs text-destructive">
-                                    {fieldErrors[question.uid]}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                      </div>
-                    )}
-
-                    {/* Group fields by category */}
-                    {Object.entries(groupFieldsByCategory()).map(
-                      ([category, fields]) => (
-                        <div
-                          key={category}
-                          className="border rounded-md p-4"
-                        >
-                          <h3 className="text-sm font-medium mb-3 capitalize">
-                            {category} Information
-                          </h3>
-                          {fields.map(renderTemplateField)}
-                        </div>
-                      )
-                    )}
-                    
-                    <div className="border rounded-md p-4">
-                      <h3 className="text-sm font-medium mb-3">
-                        Signature Settings
-                      </h3>
-                      <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="signature-provider" className="text-right">
-                          Signature Provider
-                        </Label>
-                        <Select 
-                          value={selectedSignatureProvider}
-                          onValueChange={setSelectedSignatureProvider}
-                        >
-                          <SelectTrigger id="signature-provider" className="col-span-3">
-                            <SelectValue placeholder="Select signature provider" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="docusign">DocuSign</SelectItem>
-                            <SelectItem value="adobe_sign">Adobe Sign</SelectItem>
-                            <SelectItem value="pandadoc">PandaDoc</SelectItem>
-                            <SelectItem value="hellosign">HelloSign</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
                   </div>
-                )}
-              </CardContent>
-              <CardFooter className="flex justify-between">
-                <Button variant="outline" onClick={() => setCurrentStep(1)}>
-                  Back to Templates
-                </Button>
-                <Button 
-                  onClick={handleCreateDocument} 
-                  disabled={isCreatingDocument || isLoadingTemplate}
-                >
-                  {isCreatingDocument ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Creating Document...
-                    </>
-                  ) : (
-                    "Create Document"
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Document Details</CardTitle>
+                  <CardDescription>Fill in the required fields for this document template</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {validationErrors.length > 0 && (
+                    <Alert variant="destructive" className="mb-6">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Validation Errors</AlertTitle>
+                      <AlertDescription>
+                        <ul className="list-disc pl-5 mt-2 space-y-1">
+                          {validationErrors.map((error, index) => (
+                            <li key={index}>{error}</li>
+                          ))}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
                   )}
-                </Button>
-              </CardFooter>
-            </Card>
+                  
+                  {templateFields.length > 0 ? (
+                    renderFieldsByGroups()
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">No fields available for this template.</p>
+                    </div>
+                  )}
+                </CardContent>
+                <CardFooter className="flex justify-between border-t p-6">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setCurrentStep(1);
+                      setSelectedTemplate("");
+                    }}
+                  >
+                    Back to Templates
+                  </Button>
+                  <div className="flex space-x-2">
+                    <Button
+                      variant="default"
+                      onClick={createContract}
+                      disabled={isCreatingDocument}
+                    >
+                      {isCreatingDocument ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          Create Document
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardFooter>
+              </Card>
+            </div>
           )}
           
           {/* Success Dialog */}

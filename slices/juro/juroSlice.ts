@@ -192,6 +192,26 @@ export const deleteDocumentLink = createAsyncThunk(
   }
 );
 
+// Autofill template thunk
+export const autofillContract = createAsyncThunk(
+  "juro/autofillContract",
+  async (
+    data: { 
+      template_id: string; 
+      client_id?: number; 
+      ticket_id?: number;
+    },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await juroService.autofillContract(data);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error));
+    }
+  }
+);
+
 // User settings thunks
 export const getUserSettings = createAsyncThunk(
   "juro/getUserSettings",
@@ -266,6 +286,7 @@ interface JuroState {
   error: string | null;
   documentLinks: Record<string, DocumentLink[]>; // clientId -> DocumentLinks[]
   userSettings: UserSettings | null;
+  autofilledContract: JuroContract | null;
 }
 
 const initialState: JuroState = {
@@ -275,6 +296,7 @@ const initialState: JuroState = {
   error: null,
   documentLinks: {},
   userSettings: null,
+  autofilledContract: null,
 };
 
 const juroSlice = createSlice({
@@ -286,6 +308,9 @@ const juroSlice = createSlice({
     },
     clearCurrentTemplate: (state) => {
       state.templates = [];
+    },
+    clearAutofilledContract: (state) => {
+      state.autofilledContract = null;
     },
   },
   extraReducers: (builder) => {
@@ -478,6 +503,21 @@ const juroSlice = createSlice({
         state.error = action.error.message || null;
       })
 
+      // Autofill template
+      .addCase(autofillContract.pending, (state) => {
+        state.status = "loading";
+        state.autofilledContract = null;
+      })
+      .addCase(autofillContract.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.autofilledContract = action.payload;
+      })
+      .addCase(autofillContract.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+        state.autofilledContract = null;
+      })
+
       // User settings
       .addCase(getUserSettings.pending, (state) => {
         state.status = "loading";
@@ -505,5 +545,5 @@ const juroSlice = createSlice({
   },
 });
 
-export const { clearCurrentContract, clearCurrentTemplate } = juroSlice.actions;
+export const { clearCurrentContract, clearCurrentTemplate, clearAutofilledContract } = juroSlice.actions;
 export default juroSlice.reducer;

@@ -112,7 +112,7 @@ export const sendContractForSigningBySignatory = (
  */
 export const downloadContractPdf = (contractId: string) => {
   return httpCommon.get(`/api/juro/v1/contracts/${contractId}/pdf`, {
-    responseType: 'arraybuffer'
+    responseType: "arraybuffer",
   });
 };
 
@@ -133,7 +133,6 @@ export const getTemplate = (templateId: string) => {
   return httpCommon.get(`/api/juro/v1/templates/${templateId}`);
 };
 
-
 /**
  * Get all document links for a client.
  * @param clientId ID of the client
@@ -149,7 +148,10 @@ export const getClientDocumentLinks = (clientId: string) => {
  * @param data Document link data
  * @returns Promise with created document link
  */
-export const createDocumentLink = (clientId: string, data: Record<string, any>) => {
+export const createDocumentLink = (
+  clientId: string,
+  data: Record<string, any>
+) => {
   return httpCommon.post(`/api/juro/db/document-links/${clientId}`, data);
 };
 
@@ -160,7 +162,9 @@ export const createDocumentLink = (clientId: string, data: Record<string, any>) 
  * @returns Promise with document link
  */
 export const getDocumentLink = (clientId: string, documentId: string) => {
-  return httpCommon.get(`/api/juro/db/document-links/${clientId}/${documentId}`);
+  return httpCommon.get(
+    `/api/juro/db/document-links/${clientId}/${documentId}`
+  );
 };
 
 /**
@@ -170,8 +174,15 @@ export const getDocumentLink = (clientId: string, documentId: string) => {
  * @param data Updated document link data
  * @returns Promise with updated document link
  */
-export const updateDocumentLink = (clientId: string, documentId: string, data: Record<string, any>) => {
-  return httpCommon.patch(`/api/juro/db/document-links/${clientId}/${documentId}`, data);
+export const updateDocumentLink = (
+  clientId: string,
+  documentId: string,
+  data: Record<string, any>
+) => {
+  return httpCommon.patch(
+    `/api/juro/db/document-links/${clientId}/${documentId}`,
+    data
+  );
 };
 
 /**
@@ -181,7 +192,9 @@ export const updateDocumentLink = (clientId: string, documentId: string, data: R
  * @returns Promise with confirmation message
  */
 export const deleteDocumentLink = (clientId: string, documentId: string) => {
-  return httpCommon.delete(`/api/juro/db/document-links/${clientId}/${documentId}`);
+  return httpCommon.delete(
+    `/api/juro/db/document-links/${clientId}/${documentId}`
+  );
 };
 
 /**
@@ -199,10 +212,25 @@ export const getUserSettings = (userId: string) => {
  * @param data User settings data
  * @returns Promise with created or updated user settings
  */
-export const createOrUpdateUserSettings = (userId: string, data: Record<string, any>) => {
+export const createOrUpdateUserSettings = (
+  userId: string,
+  data: Record<string, any>
+) => {
   return httpCommon.post(`/api/juro/db/user-settings/${userId}`, data);
 };
 
+/**
+ * Autofill a template.
+ * @param data Autofill data including template ID, client ID, and ticket ID
+ * @returns Promise with autofill response
+ */
+export const autofillContract = (data: {
+  template_id: string;
+  client_id?: number;
+  ticket_id?: number;
+}) => {
+  return httpCommon.post(`/api/juro/v1/autofill`, data);
+};
 
 const juroService = {
   checkHealth,
@@ -217,13 +245,14 @@ const juroService = {
   downloadContractPdf,
   getTemplates,
   getTemplate,
+  autofillContract,
   getClientDocumentLinks,
   createDocumentLink,
   getDocumentLink,
   updateDocumentLink,
   deleteDocumentLink,
   getUserSettings,
-  createOrUpdateUserSettings
+  createOrUpdateUserSettings,
 };
 
 export default juroService;
