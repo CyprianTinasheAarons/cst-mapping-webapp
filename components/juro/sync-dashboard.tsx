@@ -205,6 +205,8 @@ export function SyncDashboard() {
     (state) => state.juro
   );
 
+  const documentLinks = useAppSelector((state) => state.juro.documentLinks);
+
   // Function to safely make API calls with rate limiting protection
   const safeApiCall = useCallback(
     async (
@@ -404,6 +406,8 @@ export function SyncDashboard() {
                 internalUrl,
                 documentTitle
               );
+              // Re-fetch document links to ensure the Redux store is updated
+              dispatch(fetchClientDocumentLinks(selectedClient.id.toString()));
             }
 
             setDocumentCreated(true);
@@ -862,6 +866,11 @@ export function SyncDashboard() {
     setCreatedDocumentId(null);
     setValidationErrors([]);
 
+    // Fetch document links for this specific client when opening the document dialog
+    if (client && client.id) {
+      dispatch(fetchClientDocumentLinks(client.id.toString()));
+    }
+
     // Fetch complete client details
     setIsLoadingClientDetails(true);
     dispatch(fetchHaloClientById(client.id))
@@ -1142,6 +1151,10 @@ export function SyncDashboard() {
   const handleViewContracts = (client: any) => {
     setSelectedClient(client);
     setIsContractDialogOpen(true);
+    // Fetch document links when opening contract dialog
+    if (client && client.id) {
+      dispatch(fetchClientDocumentLinks(client.id.toString()));
+    }
   };
 
   // Get contracts for the selected client
@@ -1273,28 +1286,9 @@ export function SyncDashboard() {
     [dispatch]
   );
 
-  // Get document links from the database
-  const getClientDocumentUrls = useCallback(
-    (clientId: string) => {
-      try {
-        // Use the Redux store data if available
-        const documents = useAppSelector(
-          (state) => state.juro.documentLinks[clientId] || []
-        );
-
-        // If not already loaded, fetch them
-        if (documents.length === 0) {
-          dispatch(fetchClientDocumentLinks(clientId));
-        }
-
-        return documents;
-      } catch (error) {
-        console.error("Error retrieving document URLs from database:", error);
-        return [];
-      }
-    },
-    [dispatch]
-  );
+  const getClientDocumentUrls = (clientId: string) => {
+    return documentLinks[clientId] || [];
+  };
 
   // Handle signature capture clear
   const clearSignature = () => {
@@ -1510,82 +1504,15 @@ export function SyncDashboard() {
                                 Halo PSA
                               </a>
                             </Button>
-                            <Button variant="outline" size="sm">
-                              <Lock className="h-4 w-4 mr-2" />
-                              Admin
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="space-x-1"
+                              onClick={() => handleViewContracts(client)}
+                            >
+                              <File className="h-3.5 w-3.5" />
+                              <span>Documents</span>
                             </Button>
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="space-x-1"
-                                >
-                                  <File className="h-3.5 w-3.5" />
-                                  <span>Documents</span>
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-md">
-                                <DialogHeader>
-                                  <DialogTitle>Client Documents</DialogTitle>
-                                  <DialogDescription>
-                                    Documents created for {client.name}
-                                  </DialogDescription>
-                                </DialogHeader>
-
-                                {(() => {
-                                  const clientDocUrls = getClientDocumentUrls(
-                                    client.id.toString()
-                                  );
-                                  return clientDocUrls.length > 0 ? (
-                                    <div className="space-y-2">
-                                      {clientDocUrls.map(
-                                        (
-                                          doc: {
-                                            document_id: string;
-                                            document_url: string;
-                                            document_title: string;
-                                            created_at: string;
-                                          },
-                                          index: number
-                                        ) => (
-                                          <div
-                                            key={index}
-                                            className="flex items-center justify-between p-2 bg-background rounded border"
-                                          >
-                                            <div className="truncate">
-                                              <p className="font-medium">
-                                                {doc.document_title ||
-                                                  `Document ${index + 1}`}
-                                              </p>
-                                              <p className="text-xs text-muted-foreground">
-                                                {new Date(
-                                                  doc.created_at
-                                                ).toLocaleDateString()}
-                                              </p>
-                                            </div>
-                                            <div className="flex space-x-2">
-                                              <a
-                                                href={doc.document_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="p-1 hover:bg-accent rounded"
-                                              >
-                                                <ExternalLink className="h-4 w-4" />
-                                              </a>
-                                            </div>
-                                          </div>
-                                        )
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <div className="text-center py-4 text-muted-foreground">
-                                      No documents found
-                                    </div>
-                                  );
-                                })()}
-                              </DialogContent>
-                            </Dialog>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -2126,6 +2053,7 @@ export function SyncDashboard() {
                         href={`https://app.juro.com/sign/${createdDocumentId}`}
                         target="_blank"
                         rel="noopener noreferrer"
+                        className="flex items-center"
                       >
                         <ExternalLink className="h-4 w-4 mr-2" />
                         Open in Juro
@@ -2150,7 +2078,7 @@ export function SyncDashboard() {
         open={isContractDialogOpen}
         onOpenChange={setIsContractDialogOpen}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Contracts for {selectedClient?.name}</DialogTitle>
             <DialogDescription>
@@ -2167,53 +2095,92 @@ export function SyncDashboard() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Contract Name</TableHead>
+                <TableHead>Document Name</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {clientContracts.length > 0 ? (
-                clientContracts.map((contract) => (
-                  <TableRow key={contract.id}>
-                    <TableCell className="font-medium">
-                      {contract.ref}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          contract.status === "Active" ? "default" : "outline"
-                        }
-                      >
-                        {contract.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(contract.created_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end space-x-2">
-                        <Button variant="ghost" size="sm">
-                          <FileText className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Download className="h-4 w-4" />
-                        </Button>
+              {clientContracts.length > 0 ||
+              (selectedClient &&
+                documentLinks[selectedClient.id]?.length > 0) ? (
+                <>
+                  {/* Show Halo contracts */}
+                  {clientContracts.map((contract) => (
+                    <TableRow key={contract.id}>
+                      <TableCell className="font-medium">
+                        {contract.ref}
+                      </TableCell>
+                      <TableCell>
                         <Badge
                           variant={
-                            documentStatus[contract.id]
-                              ? "outline"
-                              : "secondary"
+                            contract.status === "Active" ? "default" : "outline"
                           }
-                          className="ml-2"
                         >
-                          {documentStatus[contract.id] || contract.status}
+                          {contract.status}
                         </Badge>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                      </TableCell>
+                      <TableCell>
+                        {new Date(contract.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end space-x-2">
+                          <Button variant="ghost" size="sm">
+                            <FileText className="h-4 w-4" />
+                          </Button>
+
+                          <Badge
+                            variant={
+                              documentStatus[contract.id]
+                                ? "outline"
+                                : "secondary"
+                            }
+                            className="ml-2"
+                          >
+                            {documentStatus[contract.id] || contract.status}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+
+                  {/* Show document links from Redux store */}
+                  {selectedClient &&
+                    documentLinks[selectedClient.id]?.map((docLink) => (
+                      <TableRow key={docLink.document_id}>
+                        <TableCell className="font-medium">
+                          {docLink.document_title || "Untitled Document"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {docLink.status || "Created"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {docLink.created_at
+                            ? new Date(docLink.created_at).toLocaleDateString()
+                            : "N/A"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                            <Button variant="ghost" size="sm" asChild>
+                              <a
+                                href={docLink.document_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </a>
+                            </Button>
+                            <Button variant="ghost" size="sm">
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </>
               ) : (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center py-8">
@@ -2233,6 +2200,17 @@ export function SyncDashboard() {
               )}
             </TableBody>
           </Table>
+
+          {/* Debug information for document links */}
+          {selectedClient && (
+            <div className="mt-4 text-xs text-muted-foreground">
+              <p>ClientID: {selectedClient.id}</p>
+              <p>
+                Document Links: {documentLinks[selectedClient.id]?.length || 0}{" "}
+                found
+              </p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
