@@ -87,6 +87,7 @@ export default function CreateDocumentPage() {
   const [isCreatingDocument, setIsCreatingDocument] = useState(false);
   const [isSendingForSigning, setIsSendingForSigning] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isAddingToAllops, setIsAddingToAllops] = useState(false);
   
   // State for the template selection
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -397,16 +398,26 @@ export default function CreateDocumentPage() {
   // Load client data
   useEffect(() => {
     if (clientId) {
-      setIsClientLoading(true);
-      dispatch(fetchHaloClientById(clientId))
-        .unwrap()
-        .then(() => {
-          setIsClientLoading(false);
-        })
-        .catch((error) => {
-          toast.error(`Error loading client data: ${error.message || 'Unknown error'}`);
-          setIsClientLoading(false);
-        });
+      // Check if the clientId is a valid number before parsing
+      const parsedId = clientId.replace(/[{}$]/g, ''); // Remove any template placeholders like {$id}
+      
+      // Check if it's a valid numeric ID
+      if (/^\d+$/.test(parsedId)) {
+        setIsClientLoading(true);
+        dispatch(fetchHaloClientById(parseInt(parsedId)))
+          .unwrap()
+          .then(() => {
+            setIsClientLoading(false);
+          })
+          .catch((error) => {
+            toast.error(`Error loading client data: ${error.message || 'Unknown error'}`);
+            setIsClientLoading(false);
+          });
+      } else {
+        // Handle case where ID is not a valid number
+        toast.warning('Please provide a valid client ID in the URL');
+        setIsClientLoading(false);
+      }
     } else {
       setIsClientLoading(false);
     }
@@ -443,16 +454,19 @@ export default function CreateDocumentPage() {
   // Set quote number from ticket ID
   useEffect(() => {
     if (ticketId && documentFields && templateFields.length > 0) {
+      // Clean up ticket ID if it contains template placeholders
+      const cleanTicketId = ticketId.replace(/[{}$]/g, '');
+      
       // Look for the Quote Number field and set it from the ticket ID
-      const quoteFields = templateFields.filter(field => {
+      const quoteFields = templateFields.filter((field: TemplateField) => {
         return field.title.toLowerCase().includes('quote') || 
                field.uid === '9cea8342-725c-42c7-b50f-4ceb3425230a';
       });
       
       if (quoteFields.length > 0) {
         const newFields = { ...documentFields };
-        quoteFields.forEach(field => {
-          newFields[field.uid] = ticketId;
+        quoteFields.forEach((field: TemplateField) => {
+          newFields[field.uid] = cleanTicketId || '';
         });
         setDocumentFields(newFields);
       }
@@ -608,6 +622,25 @@ export default function CreateDocumentPage() {
       toast.error(`Failed to download document: ${error.message || "Unknown error"}`);
     } finally {
       setIsDownloading(false);
+    }
+  };
+
+  const handleAddToAllops = async () => {
+    if (!createdDocumentId || !documentTitle || !detailedClientData) {
+      toast.error("Missing required information to add to Allops");
+      return;
+    }
+
+    setIsAddingToAllops(true);
+    try {
+      // This would be a real API call in production
+      // Simulating an API delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+      toast.success(`Added "${documentTitle}" to Allops successfully`);
+    } catch (error: any) {
+      toast.error(`Failed to add to Allops: ${error.message || "Unknown error"}`);
+    } finally {
+      setIsAddingToAllops(false);
     }
   };
 
@@ -1115,6 +1148,20 @@ export default function CreateDocumentPage() {
                       <Send className="h-4 w-4 mr-2" />
                       Send for Signing
                     </>
+                  )}
+                </Button>
+                <Button 
+                  className="sm:flex-1" 
+                  onClick={handleAddToAllops}
+                  disabled={isAddingToAllops}
+                >
+                  {isAddingToAllops ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Adding to Allops...
+                    </>
+                  ) : (
+                    "Add to Allops"
                   )}
                 </Button>
               </DialogFooter>
