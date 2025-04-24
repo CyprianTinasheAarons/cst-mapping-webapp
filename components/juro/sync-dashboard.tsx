@@ -23,6 +23,10 @@ import {
   Eye,
   File,
   ExternalLink,
+  Settings,
+  Pen,
+  Eraser,
+  Lightbulb,
 } from "lucide-react";
 import {
   Pagination,
@@ -34,17 +38,22 @@ import {
 } from "@/components/ui/pagination";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import {
-  fetchHaloClients,
-  fetchHaloContracts,
-  fetchHaloClientById,
-} from "../../slices/halo/haloSlice";
-import {
   fetchJuroTemplates,
   fetchJuroTemplate,
   createJuroContract,
+  getClientDocumentLinks as fetchClientDocumentLinks,
+  createDocumentLink,
+  getUserSettings,
+  createOrUpdateUserSettings,
+  signContract,
   sendContractForSigning,
-  downloadContractPdf,
-} from "../../slices/juro/juroSlice";
+  downloadContractPdf
+} from "@/slices/juro/juroSlice";
+import {
+  fetchHaloClients,
+  fetchHaloContracts,
+  fetchHaloClientById,
+} from "@/slices/halo/haloSlice";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
@@ -70,6 +79,8 @@ import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { JuroContractCreator } from "./juroContractCreator";
 import PdfPreview from "./PdfPreview";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@radix-ui/react-select";
 
 interface TemplateField {
   title: string;
@@ -169,6 +180,18 @@ export function SyncDashboard() {
   // Minimum time between API calls (in ms)
   const API_CALL_COOLDOWN = 500;
 
+  // State for signature modal
+  const [showSignatureModal, setShowSignatureModal] = useState<boolean>(false);
+  const [signatureData, setSignatureData] = useState<string>("");
+  const [signingInProgress, setSigningInProgress] = useState<boolean>(false);
+  const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Settings state
+  const [autoSendForSigning, setAutoSendForSigning] = useState<boolean>(false);
+  const [defaultSignatoryEmail, setDefaultSignatoryEmail] = useState<string>("");
+
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+
   const dispatch = useAppDispatch();
 
   const {
@@ -181,7 +204,6 @@ export function SyncDashboard() {
   const {
     templates: juroTemplates,
     status: juroStatus,
-    currentTemplate,
   } = useAppSelector((state) => state.juro);
 
   // Function to safely make API calls with rate limiting protection
@@ -192,84 +214,84 @@ export function SyncDashboard() {
       onSuccess: (data: any) => void,
       onError: (error: any) => void
     ) => {
-      // Check if we're currently rate limited
-      if (isRateLimited) {
-        const now = new Date();
-        if (rateLimitResetTime && now < rateLimitResetTime) {
-          const secondsToWait = Math.ceil(
-            (rateLimitResetTime.getTime() - now.getTime()) / 1000
-          );
-          toast.warning(
-            `API rate limit reached. Please wait ${secondsToWait} seconds before trying again.`
-          );
-          return;
-        } else {
-          setIsRateLimited(false);
-        }
-      }
-
-      // Check if this specific API call is already in progress
-      if (apiCallsInProgress[callName]) {
-        console.log(
-          `API call "${callName}" already in progress, skipping duplicate call`
+    // Check if we're currently rate limited
+    if (isRateLimited) {
+      const now = new Date();
+      if (rateLimitResetTime && now < rateLimitResetTime) {
+        const secondsToWait = Math.ceil(
+          (rateLimitResetTime.getTime() - now.getTime()) / 1000
+        );
+        toast.warning(
+          `API rate limit reached. Please wait ${secondsToWait} seconds before trying again.`
         );
         return;
+      } else {
+        setIsRateLimited(false);
       }
+    }
 
-      // Check if we need to wait before making another API call
-      const now = Date.now();
-      const lastCallTime = lastApiCallTimestamps.current[callName] || 0;
-      const timeSinceLastCall = now - lastCallTime;
+    // Check if this specific API call is already in progress
+    if (apiCallsInProgress[callName]) {
+      console.log(
+        `API call "${callName}" already in progress, skipping duplicate call`
+      );
+      return;
+    }
 
-      if (timeSinceLastCall < API_CALL_COOLDOWN) {
-        console.log(
-          `Throttling API call "${callName}" - too soon after last call`
-        );
-        setTimeout(() => {
-          safeApiCall(callName, apiFunction, onSuccess, onError);
-        }, API_CALL_COOLDOWN - timeSinceLastCall);
-        return;
-      }
+    // Check if we need to wait before making another API call
+    const now = Date.now();
+    const lastCallTime = lastApiCallTimestamps.current[callName] || 0;
+    const timeSinceLastCall = now - lastCallTime;
 
-      // Mark this API call as in progress
-      setApiCallsInProgress((prev) => ({ ...prev, [callName]: true }));
-      lastApiCallTimestamps.current[callName] = now;
+    if (timeSinceLastCall < API_CALL_COOLDOWN) {
+      console.log(
+        `Throttling API call "${callName}" - too soon after last call`
+      );
+      setTimeout(() => {
+        safeApiCall(callName, apiFunction, onSuccess, onError);
+      }, API_CALL_COOLDOWN - timeSinceLastCall);
+      return;
+    }
 
-      try {
-        const response = await apiFunction();
-        onSuccess(response);
-      } catch (error: any) {
-        // Check if this is a rate limit error (status 429)
-        if (error.response && error.response.status === 429) {
-          // Get the reset time from headers if available
-          const resetTimeHeader =
-            error.response.headers["x-rate-limit-reset"] ||
-            error.response.headers["Retry-After"];
+    // Mark this API call as in progress
+    setApiCallsInProgress((prev) => ({ ...prev, [callName]: true }));
+    lastApiCallTimestamps.current[callName] = now;
 
-          if (resetTimeHeader) {
-            const resetTime = new Date();
-            resetTime.setSeconds(
-              resetTime.getSeconds() + parseInt(resetTimeHeader)
-            );
-            setRateLimitResetTime(resetTime);
-          } else {
-            // Default to 60 seconds if no header provided
-            const resetTime = new Date();
-            resetTime.setSeconds(resetTime.getSeconds() + 60);
-            setRateLimitResetTime(resetTime);
-          }
+    try {
+      const response = await apiFunction();
+      onSuccess(response);
+    } catch (error: any) {
+      // Check if this is a rate limit error (status 429)
+      if (error.response && error.response.status === 429) {
+        // Get the reset time from headers if available
+        const resetTimeHeader =
+          error.response.headers["x-rate-limit-reset"] ||
+          error.response.headers["Retry-After"];
 
-          setIsRateLimited(true);
-          toast.error("API rate limit exceeded. Please try again later.");
+        if (resetTimeHeader) {
+          const resetTime = new Date();
+          resetTime.setSeconds(
+            resetTime.getSeconds() + parseInt(resetTimeHeader)
+          );
+          setRateLimitResetTime(resetTime);
         } else {
-          onError(error);
+          // Default to 60 seconds if no header provided
+          const resetTime = new Date();
+          resetTime.setSeconds(resetTime.getSeconds() + 60);
+          setRateLimitResetTime(resetTime);
         }
-      } finally {
-        setApiCallsInProgress((prev) => ({ ...prev, [callName]: false }));
+
+        setIsRateLimited(true);
+        toast.error("API rate limit exceeded. Please try again later.");
+      } else {
+        onError(error);
       }
-    },
-    [isRateLimited, rateLimitResetTime, apiCallsInProgress]
-  );
+    } finally {
+      setApiCallsInProgress((prev) => ({ ...prev, [callName]: false }));
+    }
+  },
+  [isRateLimited, rateLimitResetTime, apiCallsInProgress]
+);
 
   // Load templates with caching
   const loadTemplates = useCallback(() => {
@@ -376,7 +398,7 @@ export function SyncDashboard() {
 
             // Save to local storage if client is selected
             if (selectedClient && selectedClient.id) {
-              saveDocumentUrlToLocalStorage(
+              saveDocumentUrlToDatabase(
                 selectedClient.id.toString(),
                 contract.id.toString(),
                 internalUrl,
@@ -397,6 +419,9 @@ export function SyncDashboard() {
                 </a>
               </div>
             );
+
+            // Show signature modal for internal signing
+            setShowSignatureModal(true);
 
             // Refresh contracts list with a delay to avoid rate limiting
             setTimeout(() => {
@@ -553,18 +578,21 @@ export function SyncDashboard() {
 
   // Handle when template details are fetched - keep the caching logic
   useEffect(() => {
-    if (currentTemplate && selectedTemplate && detailedClientData) {
-      processTemplateDetails(currentTemplate);
+    if (selectedTemplate && detailedClientData) {
+      const template = juroTemplates.find((t) => t.id === selectedTemplate);
+      if (template) {
+        processTemplateDetails(template);
+      }
 
       // Cache the template
       setTemplateCache((prev) => ({
         ...prev,
-        [selectedTemplate]: currentTemplate,
+        [selectedTemplate]: template,
       }));
 
       setIsLoadingTemplate(false);
     }
-  }, [currentTemplate, detailedClientData, selectedTemplate]);
+  }, [selectedTemplate, detailedClientData, juroTemplates]);
 
   // Reset loading states if the status changes to success or failure
   useEffect(() => {
@@ -579,6 +607,42 @@ export function SyncDashboard() {
       setIsCreatingDocument(false);
     }
   }, [juroStatus]);
+
+  // Add this to your useEffect that loads initial data
+  useEffect(() => {
+    // Load user settings from database (replace with actual API call)
+    const loadUserSettings = async () => {
+      try {
+        // This would be replaced with an actual API call to your database
+        // For now, we'll fall back to localStorage for demo purposes
+        const settingsStr = localStorage.getItem("user_settings");
+        if (settingsStr) {
+          const settings = JSON.parse(settingsStr);
+          setAutoSendForSigning(settings.autoSendForSigning || false);
+          setDefaultSignatoryEmail(settings.defaultSignatoryEmail || "");
+        }
+      } catch (error) {
+        console.error("Error loading user settings:", error);
+      }
+    };
+
+    loadUserSettings();
+  }, []);
+
+  // Save user settings
+  const saveUserSettings = useCallback(async () => {
+    try {
+      // This would be replaced with an actual API call to your database
+      // For now, we'll save to localStorage for demo purposes
+      const settings = {
+        autoSendForSigning,
+        defaultSignatoryEmail,
+      };
+      localStorage.setItem("user_settings", JSON.stringify(settings));
+    } catch (error) {
+      console.error("Error saving user settings:", error);
+    }
+  }, [autoSendForSigning, defaultSignatoryEmail]);
 
   const processTemplateDetails = (template: any) => {
     if (!template || !template.fields) {
@@ -663,10 +727,7 @@ export function SyncDashboard() {
           // Counterparty Contact Email
           case "2fff3269-19c6-4d02-9c78-d04156991bfb":
             initialFields[field.uid] =
-              clientData.accountsemailaddress ||
-              clientData.main_contact_email ||
-              clientData.email ||
-              "";
+              clientData.accountsemailaddress || clientData.email || "";
             break;
 
           // Contract Reason
@@ -1138,62 +1199,218 @@ export function SyncDashboard() {
   const isAnyApiCallInProgress =
     Object.values(apiCallsInProgress).some(Boolean);
 
-  // Local storage utility for document URLs
-  const saveDocumentUrlToLocalStorage = useCallback(
-    (
-      clientId: string,
-      documentId: string,
-      documentUrl: string,
-      documentTitle: string
-    ) => {
-      try {
-        // Get existing URLs for this client
-        const storedData = localStorage.getItem("client_document_urls");
-        const clientDocUrls = storedData ? JSON.parse(storedData) : {};
+  // Current user ID - in a real app, this would come from auth
+  const currentUserId = "current_user";
 
-        // Update the URLs for this client
-        if (!clientDocUrls[clientId]) {
-          clientDocUrls[clientId] = [];
+  // Load user settings
+  useEffect(() => {
+    dispatch(getUserSettings(currentUserId))
+      .unwrap()
+      .then((settings) => {
+        if (settings) {
+          setAutoSendForSigning(settings.auto_send_for_signing || false);
+          setDefaultSignatoryEmail(settings.default_signatory_email || "");
         }
+      })
+      .catch((error) => {
+        console.error("Error loading user settings:", error);
+      });
+  }, [dispatch]);
 
-        // Add the new document URL with metadata
-        clientDocUrls[clientId].push({
-          id: documentId,
-          url: documentUrl,
-          title: documentTitle,
-          createdAt: new Date().toISOString(),
-        });
+  // Handle settings update
+  const handleSaveSettings = useCallback(() => {
+    const settingsData = {
+      auto_send_for_signing: autoSendForSigning,
+      default_signatory_email: defaultSignatoryEmail,
+    };
 
-        // Save back to local storage
-        localStorage.setItem(
-          "client_document_urls",
-          JSON.stringify(clientDocUrls)
-        );
+    dispatch(createOrUpdateUserSettings({ userId: currentUserId, data: settingsData }))
+      .unwrap()
+      .then(() => {
+        toast.success("Settings saved successfully");
+        setIsSettingsDialogOpen(false);
+      })
+      .catch((error) => {
+        console.error("Error saving settings:", error);
+        toast.error(`Failed to save settings: ${error}`);
+      });
+  }, [dispatch, autoSendForSigning, defaultSignatoryEmail, currentUserId]);
+
+  // Database-backed document URL saving
+  const saveDocumentUrlToDatabase = useCallback(
+    async (clientId: string, documentId: string, documentUrl: string, documentTitle: string) => {
+      if (!clientId || !documentId || !documentUrl) {
+        console.error("Missing required parameters for saving document URL");
+        return;
+      }
+
+      try {
+        const documentData = {
+          document_id: documentId,
+          document_url: documentUrl,
+          document_title: documentTitle,
+          status: "Created",
+          created_at: new Date().toISOString(),
+        };
+
+        // Save to the database using Redux thunk
+        await dispatch(createDocumentLink({ clientId, data: documentData })).unwrap();
 
         console.log(`Saved document URL for client ${clientId}:`, documentUrl);
       } catch (error) {
-        console.error("Error saving document URL to local storage:", error);
+        console.error("Error saving document URL to database:", error);
       }
     },
-    []
+    [dispatch]
   );
 
-  // Get document URLs for a client
+  // Get document links from the database
   const getClientDocumentUrls = useCallback((clientId: string) => {
     try {
-      const storedData = localStorage.getItem("client_document_urls");
-      if (!storedData) return [];
-
-      const clientDocUrls = JSON.parse(storedData);
-      return clientDocUrls[clientId] || [];
-    } catch (error) {
-      console.error(
-        "Error retrieving document URLs from local storage:",
-        error
+      // Use the Redux store data if available
+      const documents = useAppSelector((state) =>
+        state.juro.documentLinks[clientId] || []
       );
+
+      // If not already loaded, fetch them
+      if (documents.length === 0) {
+        dispatch(fetchClientDocumentLinks(clientId));
+      }
+
+      return documents;
+    } catch (error) {
+      console.error("Error retrieving document URLs from database:", error);
       return [];
     }
-  }, []);
+  }, [dispatch]);
+
+  // Handle signature capture clear
+  const clearSignature = () => {
+    const canvas = signatureCanvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      setSignatureData("");
+    }
+  };
+
+  // Handle signature capture
+  const captureSignature = () => {
+    const canvas = signatureCanvasRef.current;
+    if (canvas) {
+      // Remove the 'data:image/png;base64,' part if it exists
+      const dataUrl = canvas.toDataURL('image/png').split(',')[1];
+      setSignatureData(dataUrl);
+    }
+  };
+
+  // Handle signing the contract internally
+  const handleInternalSign = () => {
+    if (!signatureData) {
+      toast.error("Please provide a signature");
+      return;
+    }
+
+    if (!createdDocumentId) {
+      toast.error("No document available to sign");
+      return;
+    }
+
+    setSigningInProgress(true);
+
+    // Prepare signature data
+    const signData = {
+      signatureBase64: signatureData,
+      name: "Internal Signatory"
+    };
+
+    // Call the API to sign the contract
+    safeApiCall(
+      `signContract_${createdDocumentId}`,
+      () =>
+        dispatch(signContract({ contractId: createdDocumentId, data: signData })).unwrap(),
+      (result) => {
+        toast.success("Contract signed successfully");
+        setShowSignatureModal(false);
+        setSigningInProgress(false);
+
+        // Update document status
+        setDocumentStatus({
+          ...documentStatus,
+          [createdDocumentId]: "Signed",
+        });
+
+        // If auto-send for signing is enabled, send to counterparty
+        if (autoSendForSigning && defaultSignatoryEmail) {
+          // Automatically send for signing
+          handleAutoSendForSigning(createdDocumentId, defaultSignatoryEmail);
+        }
+      },
+      (error) => {
+        console.error("Error signing contract:", error);
+        toast.error(`Failed to sign contract: ${error.message || "Unknown error"}`);
+        setSigningInProgress(false);
+      }
+    );
+  };
+
+  // Function to automatically send for signing
+  const handleAutoSendForSigning = (documentId: string, email: string) => {
+    if (!documentId || !email) {
+      console.error("Missing document ID or email for auto-sending");
+      return;
+    }
+
+    // Prepare signing data
+    const signingData = {
+      provider: selectedSignatureProvider,
+      recipients: [
+        {
+          email: email,
+          name: selectedClient?.name || "Counterparty Signatory",
+          role: "Signatory",
+        },
+      ],
+    };
+
+    // Call the API to send for signing
+    safeApiCall(
+      `sendForSigning_${documentId}`,
+      () =>
+        dispatch(
+          sendContractForSigning({
+            contractId: documentId,
+            signingUid: "primary",
+            data: signingData,
+          })
+        ).unwrap(),
+      (signingResult) => {
+        if (signingResult) {
+          setDocumentStatus({
+            ...documentStatus,
+            [documentId]: "Sent for signature",
+          });
+
+          toast.success(
+            `Document automatically sent for signing to ${email}`
+          );
+
+          // Refresh contract list with delay
+          setTimeout(() => {
+            dispatch(fetchHaloContracts());
+          }, 2000);
+        }
+      },
+      (error) => {
+        console.error("Error auto-sending document for signing:", error);
+        toast.error(
+          `Failed to auto-send document for signing: ${
+            error.message || "Unknown error"
+          }`
+        );
+      }
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -1312,25 +1529,25 @@ export function SyncDashboard() {
                                   );
                                   return clientDocUrls.length > 0 ? (
                                     <div className="space-y-2">
-                                      {clientDocUrls.map((doc: any, index: number) => (
+                                      {clientDocUrls.map((doc: { document_id: string; document_url: string; document_title: string; created_at: string }, index: number) => (
                                         <div
                                           key={index}
                                           className="flex items-center justify-between p-2 bg-background rounded border"
                                         >
                                           <div className="truncate">
                                             <p className="font-medium">
-                                              {doc.title ||
+                                              {doc.document_title ||
                                                 `Document ${index + 1}`}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
                                               {new Date(
-                                                doc.createdAt
+                                                doc.created_at
                                               ).toLocaleDateString()}
                                             </p>
                                           </div>
                                           <div className="flex space-x-2">
                                             <a
-                                              href={doc.url}
+                                              href={doc.document_url}
                                               target="_blank"
                                               rel="noopener noreferrer"
                                               className="p-1 hover:bg-accent rounded"
@@ -1920,7 +2137,7 @@ export function SyncDashboard() {
         open={isContractDialogOpen}
         onOpenChange={setIsContractDialogOpen}
       >
-        <DialogContent className="sm:max-w-[625px]">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Contracts for {selectedClient?.name}</DialogTitle>
             <DialogDescription>
@@ -2013,6 +2230,304 @@ export function SyncDashboard() {
         />
       )}
       <ToastContainer />
+
+      {/* Signature Modal */}
+      {showSignatureModal && (
+        <Dialog open={showSignatureModal} onOpenChange={setShowSignatureModal}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="text-xl flex items-center gap-2">
+                <span className="bg-gradient-to-r from-primary to-blue-600 p-2 rounded-full">
+                  <Pen className="h-5 w-5 text-white" />
+                </span>
+                Internal Signature Required
+              </DialogTitle>
+              <DialogDescription className="text-base pt-2">
+                Please sign the document to proceed with the contract workflow.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="py-4">
+              <div className="flex items-center text-sm text-muted-foreground mb-2">
+                <FileText className="h-4 w-4 mr-2" />
+                <span className="font-medium">{documentTitle}</span>
+              </div>
+
+              <Separator className="my-3" />
+
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="signature-canvas" className="text-base mb-2 block">
+                    Draw your signature below
+                  </Label>
+                  <div className="bg-secondary/20 rounded-lg p-4">
+                    <div className="bg-white border-2 border-dashed border-primary/40 rounded-md overflow-hidden">
+                      <canvas 
+                        id="signature-canvas"
+                        ref={signatureCanvasRef}
+                        width={500}
+                        height={180}
+                        className="w-full touch-none cursor-crosshair"
+                        onMouseDown={(e) => {
+                          const canvas = signatureCanvasRef.current;
+                          if (canvas) {
+                            const ctx = canvas.getContext('2d');
+                            if (ctx) {
+                              ctx.beginPath();
+
+                              // Set up drawing properties for better signature experience
+                              ctx.lineWidth = 2.5;
+                              ctx.lineCap = 'round';
+                              ctx.lineJoin = 'round';
+                              ctx.strokeStyle = '#1a1a1a';
+
+                              // Get mouse position
+                              const rect = canvas.getBoundingClientRect();
+                              const scaleX = canvas.width / rect.width;
+                              const scaleY = canvas.height / rect.height;
+
+                              let lastX = (e.clientX - rect.left) * scaleX;
+                              let lastY = (e.clientY - rect.top) * scaleY;
+
+                              ctx.moveTo(lastX, lastY);
+
+                              const handleMove = (e: MouseEvent) => {
+                                if (ctx) {
+                                  const currentX = (e.clientX - rect.left) * scaleX;
+                                  const currentY = (e.clientY - rect.top) * scaleY;
+
+                                  // Use quadratic curves for smoother signature
+                                  ctx.quadraticCurveTo(
+                                    lastX, 
+                                    lastY, 
+                                    (lastX + currentX) / 2, 
+                                    (lastY + currentY) / 2
+                                  );
+
+                                  lastX = currentX;
+                                  lastY = currentY;
+                                  ctx.stroke();
+                                }
+                              };
+
+                              const handleEnd = () => {
+                                document.removeEventListener('mousemove', handleMove);
+                                document.removeEventListener('mouseup', handleEnd);
+                                captureSignature();
+                              };
+
+                              document.addEventListener('mousemove', handleMove);
+                              document.addEventListener('mouseup', handleEnd);
+                            }
+                          }
+                        }}
+                        // Add touch support for mobile devices
+                        onTouchStart={(e) => {
+                          e.preventDefault();
+                          const canvas = signatureCanvasRef.current;
+                          if (canvas) {
+                            const ctx = canvas.getContext('2d');
+                            if (ctx && e.touches[0]) {
+                              ctx.beginPath();
+
+                              // Set up drawing properties
+                              ctx.lineWidth = 2.5;
+                              ctx.lineCap = 'round';
+                              ctx.lineJoin = 'round';
+                              ctx.strokeStyle = '#1a1a1a';
+
+                              // Get touch position
+                              const rect = canvas.getBoundingClientRect();
+                              const scaleX = canvas.width / rect.width;
+                              const scaleY = canvas.height / rect.height;
+
+                              let lastX = (e.touches[0].clientX - rect.left) * scaleX;
+                              let lastY = (e.touches[0].clientY - rect.top) * scaleY;
+
+                              ctx.moveTo(lastX, lastY);
+
+                              const handleTouchMove = (e: TouchEvent) => {
+                                e.preventDefault();
+                                if (ctx && e.touches[0]) {
+                                  const currentX = (e.touches[0].clientX - rect.left) * scaleX;
+                                  const currentY = (e.touches[0].clientY - rect.top) * scaleY;
+
+                                  // Use quadratic curves for smoother signature
+                                  ctx.quadraticCurveTo(
+                                    lastX, 
+                                    lastY, 
+                                    (lastX + currentX) / 2, 
+                                    (lastY + currentY) / 2
+                                  );
+
+                                  lastX = currentX;
+                                  lastY = currentY;
+                                  ctx.stroke();
+                                }
+                              };
+
+                              const handleTouchEnd = () => {
+                                canvas.removeEventListener('touchmove', handleTouchMove);
+                                canvas.removeEventListener('touchend', handleTouchEnd);
+                                captureSignature();
+                              };
+
+                              canvas.addEventListener('touchmove', handleTouchMove);
+                              canvas.addEventListener('touchend', handleTouchEnd);
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex justify-between items-center mt-3">
+                      <p className="text-xs text-muted-foreground italic">Sign above using mouse or touch</p>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={clearSignature}
+                        className="h-8 text-xs"
+                      >
+                        <Eraser className="h-3 w-3 mr-1" />
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-muted/40 rounded-lg p-4">
+                  <div className="flex items-start space-x-4">
+                    <div className="bg-blue-50 p-2 rounded-full">
+                      <Lightbulb className="h-5 w-5 text-blue-500" />
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <h4 className="font-medium">What happens next?</h4>
+                      <p className="text-muted-foreground">
+                        After signing, you can download the document, open it in Juro, or automatically send it for external signing.
+                      </p>
+
+                      <div className="flex items-center pt-2">
+                        <Switch
+                          id="auto-send-modal"
+                          checked={autoSendForSigning}
+                          onCheckedChange={(checked: boolean) => {
+                            setAutoSendForSigning(checked);
+                            // Save after changing
+                            setTimeout(saveUserSettings, 100);
+                          }}
+                          className="mr-2"
+                        />
+                        <Label htmlFor="auto-send-modal" className="text-sm cursor-pointer">
+                          Automatically send for external signing
+                        </Label>
+                      </div>
+
+                      {autoSendForSigning && (
+                        <Input
+                          className="mt-2 h-8 text-sm"
+                          placeholder="Recipient email address"
+                          value={defaultSignatoryEmail}
+                          onChange={(e) => {
+                            setDefaultSignatoryEmail(e.target.value);
+                            // Debounce saving
+                            setTimeout(saveUserSettings, 500);
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button 
+                variant="outline"
+                onClick={() => setShowSignatureModal(false)}
+              >
+                Skip for now
+              </Button>
+              <Button 
+                onClick={handleInternalSign} 
+                disabled={signingInProgress || !signatureData}
+                className="min-w-[150px]"
+              >
+                {signingInProgress ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
+                    Signing...
+                  </>
+                ) : (
+                  <>
+                    <Pen className="h-4 w-4 mr-2" />
+                    Sign Document
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Settings Dialog */}
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="fixed bottom-4 right-4 z-10"
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Settings
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Document Settings</DialogTitle>
+            <DialogDescription>
+              Configure your document management preferences
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="auto-send">Auto-send for signing</Label>
+                <p className="text-sm text-muted-foreground">
+                  Automatically send for signing after internal signature
+                </p>
+              </div>
+              <Switch
+                id="auto-send"
+                checked={autoSendForSigning}
+                onCheckedChange={(checked: boolean) => {
+                  setAutoSendForSigning(checked);
+                  // Save after changing
+                  setTimeout(saveUserSettings, 100);
+                }}
+                className="mr-2"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="defaultEmail">Default signatory email</Label>
+              <Input
+                id="defaultEmail"
+                placeholder="client@example.com"
+                value={defaultSignatoryEmail}
+                onChange={(e) => {
+                  setDefaultSignatoryEmail(e.target.value);
+                  // Debounce saving
+                  setTimeout(saveUserSettings, 500);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Used for auto-sending documents for signing
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -173,15 +173,15 @@ export class JuroContractCreator {
 
     // Try to get client name from document fields or client data
     const clientName =
-      // First try the counterparty name field if it exists
+      // First try selectedClient.name (from Halo)
+      selectedClient?.name ||
+      // Then try the counterparty name field if it exists
       (counterpartyNameField && documentFields[counterpartyNameField.uid]) ||
       // Then try the counterparty contact name field
       (counterpartyContactField &&
         documentFields[counterpartyContactField.uid]) ||
       // Then try counterparty_legal_name
       documentFields.counterparty_legal_name ||
-      // Then try client data
-      selectedClient?.name ||
       "";
 
     return {

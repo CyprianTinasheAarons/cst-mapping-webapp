@@ -1,6 +1,15 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import juroService from "../../api/Juro.Service";
 import HaloService from "@/api/Halo.Service";
+import { AxiosError } from "axios";
+
+// Helper function to extract error messages
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof AxiosError) {
+    return error.response?.data?.message || error.message;
+  }
+  return String(error);
+};
 
 export const checkJuroHealth = createAsyncThunk(
   "juro/checkHealth",
@@ -62,6 +71,20 @@ export const sendContractForSigning = createAsyncThunk(
   }
 );
 
+export const signContract = createAsyncThunk(
+  "juro/signContract",
+  async ({
+    contractId,
+    data,
+  }: {
+    contractId: string;
+    data: Record<string, any>;
+  }) => {
+    const response = await juroService.signContract(contractId, data);
+    return response.data;
+  }
+);
+
 export const downloadContractPdf = createAsyncThunk(
   "juro/downloadContractPdf",
   async (contractId: string) => {
@@ -107,6 +130,96 @@ export const addContractToHalo = createAsyncThunk(
   }
 );
 
+// Document links thunks
+export const getClientDocumentLinks = createAsyncThunk(
+  "juro/getClientDocumentLinks",
+  async (clientId: string, { rejectWithValue }) => {
+    try {
+      const response = await juroService.getClientDocumentLinks(clientId);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error));
+    }
+  }
+);
+
+export const createDocumentLink = createAsyncThunk(
+  "juro/createDocumentLink",
+  async (
+    { clientId, data }: { clientId: string; data: Record<string, any> },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await juroService.createDocumentLink(clientId, data);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error));
+    }
+  }
+);
+
+export const updateDocumentLink = createAsyncThunk(
+  "juro/updateDocumentLink",
+  async (
+    {
+      clientId,
+      documentId,
+      data,
+    }: { clientId: string; documentId: string; data: Record<string, any> },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await juroService.updateDocumentLink(clientId, documentId, data);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error));
+    }
+  }
+);
+
+export const deleteDocumentLink = createAsyncThunk(
+  "juro/deleteDocumentLink",
+  async (
+    { clientId, documentId }: { clientId: string; documentId: string },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await juroService.deleteDocumentLink(clientId, documentId);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error));
+    }
+  }
+);
+
+// User settings thunks
+export const getUserSettings = createAsyncThunk(
+  "juro/getUserSettings",
+  async (userId: string, { rejectWithValue }) => {
+    try {
+      const response = await juroService.getUserSettings(userId);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error));
+    }
+  }
+);
+
+export const createOrUpdateUserSettings = createAsyncThunk(
+  "juro/createOrUpdateUserSettings",
+  async (
+    { userId, data }: { userId: string; data: Record<string, any> },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await juroService.createOrUpdateUserSettings(userId, data);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error));
+    }
+  }
+);
+
 interface JuroContract {
   id: number;
   title: string;
@@ -126,24 +239,42 @@ interface JuroTemplate {
   status: string;
 }
 
+interface DocumentLink {
+  id: string;
+  client_id: string;
+  document_id: string;
+  document_url: string;
+  document_title: string;
+  created_at: string;
+  updated_at: string;
+  status?: string;
+}
+
+interface UserSettings {
+  id: string;
+  user_id: string;
+  auto_send_for_signing: boolean;
+  default_signatory_email?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface JuroState {
   contracts: JuroContract[];
-  currentContract: JuroContract | null;
   templates: JuroTemplate[];
-  currentTemplate: JuroTemplate | null;
   status: "idle" | "loading" | "succeeded" | "failed";
   error: string | null;
-  healthStatus: "unknown" | "healthy" | "unhealthy";
+  documentLinks: Record<string, DocumentLink[]>; // clientId -> DocumentLinks[]
+  userSettings: UserSettings | null;
 }
 
 const initialState: JuroState = {
   contracts: [],
-  currentContract: null,
   templates: [],
-  currentTemplate: null,
   status: "idle",
   error: null,
-  healthStatus: "unknown",
+  documentLinks: {},
+  userSettings: null,
 };
 
 const juroSlice = createSlice({
@@ -151,10 +282,10 @@ const juroSlice = createSlice({
   initialState,
   reducers: {
     clearCurrentContract: (state) => {
-      state.currentContract = null;
+      state.contracts = [];
     },
     clearCurrentTemplate: (state) => {
-      state.currentTemplate = null;
+      state.templates = [];
     },
   },
   extraReducers: (builder) => {
@@ -165,12 +296,10 @@ const juroSlice = createSlice({
       })
       .addCase(checkJuroHealth.fulfilled, (state) => {
         state.status = "succeeded";
-        state.healthStatus = "healthy";
       })
       .addCase(checkJuroHealth.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message || null;
-        state.healthStatus = "unhealthy";
       })
 
       // Templates
@@ -191,7 +320,7 @@ const juroSlice = createSlice({
       })
       .addCase(fetchJuroTemplate.fulfilled, (state, action) => {
         state.status = "succeeded";
-        state.currentTemplate = action.payload;
+        state.templates = [action.payload];
       })
       .addCase(fetchJuroTemplate.rejected, (state, action) => {
         state.status = "failed";
@@ -204,7 +333,6 @@ const juroSlice = createSlice({
       })
       .addCase(createJuroContract.fulfilled, (state, action) => {
         state.status = "succeeded";
-        state.currentContract = action.payload;
         state.contracts.push(action.payload);
       })
       .addCase(createJuroContract.rejected, (state, action) => {
@@ -217,7 +345,6 @@ const juroSlice = createSlice({
       })
       .addCase(uploadJuroContractPdf.fulfilled, (state, action) => {
         state.status = "succeeded";
-        state.currentContract = action.payload;
         state.contracts.push(action.payload);
       })
       .addCase(uploadJuroContractPdf.rejected, (state, action) => {
@@ -230,7 +357,7 @@ const juroSlice = createSlice({
       })
       .addCase(addContractToHalo.fulfilled, (state, action) => {
         state.status = "succeeded";
-        state.currentContract = action.payload.juro;
+        state.contracts.push(action.payload.juro);
       })
       .addCase(addContractToHalo.rejected, (state, action) => {
         state.status = "failed";
@@ -248,9 +375,27 @@ const juroSlice = createSlice({
         if (index !== -1) {
           state.contracts[index] = action.payload;
         }
-        state.currentContract = action.payload;
+        state.contracts.push(action.payload);
       })
       .addCase(sendContractForSigning.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+
+      .addCase(signContract.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(signContract.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        const index = state.contracts.findIndex(
+          (contract) => contract.id === action.payload.id
+        );
+        if (index !== -1) {
+          state.contracts[index] = action.payload;
+        }
+        state.contracts.push(action.payload);
+      })
+      .addCase(signContract.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message || null;
       })
@@ -262,6 +407,98 @@ const juroSlice = createSlice({
         state.status = "succeeded";
       })
       .addCase(downloadContractPdf.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+
+      // Document links
+      .addCase(getClientDocumentLinks.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(getClientDocumentLinks.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.documentLinks[action.meta.arg] = action.payload;
+      })
+      .addCase(getClientDocumentLinks.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+
+      .addCase(createDocumentLink.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(createDocumentLink.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        if (!state.documentLinks[action.meta.arg.clientId]) {
+          state.documentLinks[action.meta.arg.clientId] = [];
+        }
+        state.documentLinks[action.meta.arg.clientId].push(action.payload);
+      })
+      .addCase(createDocumentLink.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+
+      .addCase(updateDocumentLink.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(updateDocumentLink.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        const clientId = action.meta.arg.clientId;
+        const documentId = action.meta.arg.documentId;
+        if (state.documentLinks[clientId]) {
+          const index = state.documentLinks[clientId].findIndex(
+            (link) => link.id === documentId
+          );
+          if (index !== -1) {
+            state.documentLinks[clientId][index] = action.payload;
+          }
+        }
+      })
+      .addCase(updateDocumentLink.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+
+      .addCase(deleteDocumentLink.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(deleteDocumentLink.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        const clientId = action.meta.arg.clientId;
+        const documentId = action.meta.arg.documentId;
+        if (state.documentLinks[clientId]) {
+          state.documentLinks[clientId] = state.documentLinks[clientId].filter(
+            (link) => link.id !== documentId
+          );
+        }
+      })
+      .addCase(deleteDocumentLink.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+
+      // User settings
+      .addCase(getUserSettings.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(getUserSettings.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.userSettings = action.payload;
+      })
+      .addCase(getUserSettings.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message || null;
+      })
+
+      .addCase(createOrUpdateUserSettings.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(createOrUpdateUserSettings.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.userSettings = action.payload;
+      })
+      .addCase(createOrUpdateUserSettings.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message || null;
       });
