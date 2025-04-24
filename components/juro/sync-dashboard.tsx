@@ -47,7 +47,7 @@ import {
   createOrUpdateUserSettings,
   signContract,
   sendContractForSigning,
-  downloadContractPdf
+  downloadContractPdf,
 } from "@/slices/juro/juroSlice";
 import {
   fetchHaloClients,
@@ -78,7 +78,6 @@ import {
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { JuroContractCreator } from "./juroContractCreator";
-import PdfPreview from "./PdfPreview";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@radix-ui/react-select";
 
@@ -188,7 +187,8 @@ export function SyncDashboard() {
 
   // Settings state
   const [autoSendForSigning, setAutoSendForSigning] = useState<boolean>(false);
-  const [defaultSignatoryEmail, setDefaultSignatoryEmail] = useState<string>("");
+  const [defaultSignatoryEmail, setDefaultSignatoryEmail] =
+    useState<string>("");
 
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
 
@@ -201,10 +201,9 @@ export function SyncDashboard() {
     clientById: detailedClientData,
   } = useAppSelector((state) => state.halo);
 
-  const {
-    templates: juroTemplates,
-    status: juroStatus,
-  } = useAppSelector((state) => state.juro);
+  const { templates: juroTemplates, status: juroStatus } = useAppSelector(
+    (state) => state.juro
+  );
 
   // Function to safely make API calls with rate limiting protection
   const safeApiCall = useCallback(
@@ -214,84 +213,84 @@ export function SyncDashboard() {
       onSuccess: (data: any) => void,
       onError: (error: any) => void
     ) => {
-    // Check if we're currently rate limited
-    if (isRateLimited) {
-      const now = new Date();
-      if (rateLimitResetTime && now < rateLimitResetTime) {
-        const secondsToWait = Math.ceil(
-          (rateLimitResetTime.getTime() - now.getTime()) / 1000
-        );
-        toast.warning(
-          `API rate limit reached. Please wait ${secondsToWait} seconds before trying again.`
+      // Check if we're currently rate limited
+      if (isRateLimited) {
+        const now = new Date();
+        if (rateLimitResetTime && now < rateLimitResetTime) {
+          const secondsToWait = Math.ceil(
+            (rateLimitResetTime.getTime() - now.getTime()) / 1000
+          );
+          toast.warning(
+            `API rate limit reached. Please wait ${secondsToWait} seconds before trying again.`
+          );
+          return;
+        } else {
+          setIsRateLimited(false);
+        }
+      }
+
+      // Check if this specific API call is already in progress
+      if (apiCallsInProgress[callName]) {
+        console.log(
+          `API call "${callName}" already in progress, skipping duplicate call`
         );
         return;
-      } else {
-        setIsRateLimited(false);
       }
-    }
 
-    // Check if this specific API call is already in progress
-    if (apiCallsInProgress[callName]) {
-      console.log(
-        `API call "${callName}" already in progress, skipping duplicate call`
-      );
-      return;
-    }
+      // Check if we need to wait before making another API call
+      const now = Date.now();
+      const lastCallTime = lastApiCallTimestamps.current[callName] || 0;
+      const timeSinceLastCall = now - lastCallTime;
 
-    // Check if we need to wait before making another API call
-    const now = Date.now();
-    const lastCallTime = lastApiCallTimestamps.current[callName] || 0;
-    const timeSinceLastCall = now - lastCallTime;
+      if (timeSinceLastCall < API_CALL_COOLDOWN) {
+        console.log(
+          `Throttling API call "${callName}" - too soon after last call`
+        );
+        setTimeout(() => {
+          safeApiCall(callName, apiFunction, onSuccess, onError);
+        }, API_CALL_COOLDOWN - timeSinceLastCall);
+        return;
+      }
 
-    if (timeSinceLastCall < API_CALL_COOLDOWN) {
-      console.log(
-        `Throttling API call "${callName}" - too soon after last call`
-      );
-      setTimeout(() => {
-        safeApiCall(callName, apiFunction, onSuccess, onError);
-      }, API_CALL_COOLDOWN - timeSinceLastCall);
-      return;
-    }
+      // Mark this API call as in progress
+      setApiCallsInProgress((prev) => ({ ...prev, [callName]: true }));
+      lastApiCallTimestamps.current[callName] = now;
 
-    // Mark this API call as in progress
-    setApiCallsInProgress((prev) => ({ ...prev, [callName]: true }));
-    lastApiCallTimestamps.current[callName] = now;
+      try {
+        const response = await apiFunction();
+        onSuccess(response);
+      } catch (error: any) {
+        // Check if this is a rate limit error (status 429)
+        if (error.response && error.response.status === 429) {
+          // Get the reset time from headers if available
+          const resetTimeHeader =
+            error.response.headers["x-rate-limit-reset"] ||
+            error.response.headers["Retry-After"];
 
-    try {
-      const response = await apiFunction();
-      onSuccess(response);
-    } catch (error: any) {
-      // Check if this is a rate limit error (status 429)
-      if (error.response && error.response.status === 429) {
-        // Get the reset time from headers if available
-        const resetTimeHeader =
-          error.response.headers["x-rate-limit-reset"] ||
-          error.response.headers["Retry-After"];
+          if (resetTimeHeader) {
+            const resetTime = new Date();
+            resetTime.setSeconds(
+              resetTime.getSeconds() + parseInt(resetTimeHeader)
+            );
+            setRateLimitResetTime(resetTime);
+          } else {
+            // Default to 60 seconds if no header provided
+            const resetTime = new Date();
+            resetTime.setSeconds(resetTime.getSeconds() + 60);
+            setRateLimitResetTime(resetTime);
+          }
 
-        if (resetTimeHeader) {
-          const resetTime = new Date();
-          resetTime.setSeconds(
-            resetTime.getSeconds() + parseInt(resetTimeHeader)
-          );
-          setRateLimitResetTime(resetTime);
+          setIsRateLimited(true);
+          toast.error("API rate limit exceeded. Please try again later.");
         } else {
-          // Default to 60 seconds if no header provided
-          const resetTime = new Date();
-          resetTime.setSeconds(resetTime.getSeconds() + 60);
-          setRateLimitResetTime(resetTime);
+          onError(error);
         }
-
-        setIsRateLimited(true);
-        toast.error("API rate limit exceeded. Please try again later.");
-      } else {
-        onError(error);
+      } finally {
+        setApiCallsInProgress((prev) => ({ ...prev, [callName]: false }));
       }
-    } finally {
-      setApiCallsInProgress((prev) => ({ ...prev, [callName]: false }));
-    }
-  },
-  [isRateLimited, rateLimitResetTime, apiCallsInProgress]
-);
+    },
+    [isRateLimited, rateLimitResetTime, apiCallsInProgress]
+  );
 
   // Load templates with caching
   const loadTemplates = useCallback(() => {
@@ -373,6 +372,7 @@ export function SyncDashboard() {
         "createContract",
         () => dispatch(createJuroContract(requestData)).unwrap(),
         (contract) => {
+          setDocumentCreated(true);
           if (contract && contract.id) {
             setCreatedDocumentId(contract.id.toString());
             setDocumentCreated(true);
@@ -406,6 +406,8 @@ export function SyncDashboard() {
               );
             }
 
+            setDocumentCreated(true);
+
             toast.success(
               <div>
                 <div>Document created successfully!</div>
@@ -422,7 +424,7 @@ export function SyncDashboard() {
 
             // Show signature modal for internal signing
             setShowSignatureModal(true);
-
+            setDocumentCreated(true);
             // Refresh contracts list with a delay to avoid rate limiting
             setTimeout(() => {
               dispatch(fetchHaloContracts());
@@ -645,18 +647,12 @@ export function SyncDashboard() {
   }, [autoSendForSigning, defaultSignatoryEmail]);
 
   const processTemplateDetails = (template: any) => {
-    if (!template || !template.fields) {
-      toast.error("Template data is invalid or incomplete");
-      return;
-    }
-
     // Check template version compatibility
     if (template.version && parseInt(template.version) > 2) {
       toast.warning(
         `Template version ${template.version} may have features not fully supported by this application.`
       );
     }
-
     console.log("Processing template:", template.name);
 
     // Set template fields
@@ -675,7 +671,11 @@ export function SyncDashboard() {
     initialFields.signatory_email = "s.thorne@cst.co.uk";
 
     // Handle counterparty_legal_name if it exists in template questions
-    if (selectedClient) {
+    if (
+      selectedClient &&
+      template.questions &&
+      Array.isArray(template.questions)
+    ) {
       const counterpartyLegalNameQuestion = template.questions.find(
         (q: TemplateQuestion) => q.uid === "counterparty_legal_name"
       );
@@ -1224,7 +1224,9 @@ export function SyncDashboard() {
       default_signatory_email: defaultSignatoryEmail,
     };
 
-    dispatch(createOrUpdateUserSettings({ userId: currentUserId, data: settingsData }))
+    dispatch(
+      createOrUpdateUserSettings({ userId: currentUserId, data: settingsData })
+    )
       .unwrap()
       .then(() => {
         toast.success("Settings saved successfully");
@@ -1238,7 +1240,12 @@ export function SyncDashboard() {
 
   // Database-backed document URL saving
   const saveDocumentUrlToDatabase = useCallback(
-    async (clientId: string, documentId: string, documentUrl: string, documentTitle: string) => {
+    async (
+      clientId: string,
+      documentId: string,
+      documentUrl: string,
+      documentTitle: string
+    ) => {
       if (!clientId || !documentId || !documentUrl) {
         console.error("Missing required parameters for saving document URL");
         return;
@@ -1254,7 +1261,9 @@ export function SyncDashboard() {
         };
 
         // Save to the database using Redux thunk
-        await dispatch(createDocumentLink({ clientId, data: documentData })).unwrap();
+        await dispatch(
+          createDocumentLink({ clientId, data: documentData })
+        ).unwrap();
 
         console.log(`Saved document URL for client ${clientId}:`, documentUrl);
       } catch (error) {
@@ -1265,30 +1274,33 @@ export function SyncDashboard() {
   );
 
   // Get document links from the database
-  const getClientDocumentUrls = useCallback((clientId: string) => {
-    try {
-      // Use the Redux store data if available
-      const documents = useAppSelector((state) =>
-        state.juro.documentLinks[clientId] || []
-      );
+  const getClientDocumentUrls = useCallback(
+    (clientId: string) => {
+      try {
+        // Use the Redux store data if available
+        const documents = useAppSelector(
+          (state) => state.juro.documentLinks[clientId] || []
+        );
 
-      // If not already loaded, fetch them
-      if (documents.length === 0) {
-        dispatch(fetchClientDocumentLinks(clientId));
+        // If not already loaded, fetch them
+        if (documents.length === 0) {
+          dispatch(fetchClientDocumentLinks(clientId));
+        }
+
+        return documents;
+      } catch (error) {
+        console.error("Error retrieving document URLs from database:", error);
+        return [];
       }
-
-      return documents;
-    } catch (error) {
-      console.error("Error retrieving document URLs from database:", error);
-      return [];
-    }
-  }, [dispatch]);
+    },
+    [dispatch]
+  );
 
   // Handle signature capture clear
   const clearSignature = () => {
     const canvas = signatureCanvasRef.current;
     if (canvas) {
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext("2d");
       ctx?.clearRect(0, 0, canvas.width, canvas.height);
       setSignatureData("");
     }
@@ -1299,7 +1311,7 @@ export function SyncDashboard() {
     const canvas = signatureCanvasRef.current;
     if (canvas) {
       // Remove the 'data:image/png;base64,' part if it exists
-      const dataUrl = canvas.toDataURL('image/png').split(',')[1];
+      const dataUrl = canvas.toDataURL("image/png").split(",")[1];
       setSignatureData(dataUrl);
     }
   };
@@ -1321,14 +1333,16 @@ export function SyncDashboard() {
     // Prepare signature data
     const signData = {
       signatureBase64: signatureData,
-      name: "Internal Signatory"
+      name: "Internal Signatory",
     };
 
     // Call the API to sign the contract
     safeApiCall(
       `signContract_${createdDocumentId}`,
       () =>
-        dispatch(signContract({ contractId: createdDocumentId, data: signData })).unwrap(),
+        dispatch(
+          signContract({ contractId: createdDocumentId, data: signData })
+        ).unwrap(),
       (result) => {
         toast.success("Contract signed successfully");
         setShowSignatureModal(false);
@@ -1348,7 +1362,9 @@ export function SyncDashboard() {
       },
       (error) => {
         console.error("Error signing contract:", error);
-        toast.error(`Failed to sign contract: ${error.message || "Unknown error"}`);
+        toast.error(
+          `Failed to sign contract: ${error.message || "Unknown error"}`
+        );
         setSigningInProgress(false);
       }
     );
@@ -1391,9 +1407,7 @@ export function SyncDashboard() {
             [documentId]: "Sent for signature",
           });
 
-          toast.success(
-            `Document automatically sent for signing to ${email}`
-          );
+          toast.success(`Document automatically sent for signing to ${email}`);
 
           // Refresh contract list with delay
           setTimeout(() => {
@@ -1485,11 +1499,7 @@ export function SyncDashboard() {
                               <Plus className="h-4 w-4 mr-2" />
                               Document
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              asChild
-                            >
+                            <Button variant="outline" size="sm" asChild>
                               <a
                                 href={`https://cstltd.halopsa.com/customers?mainview=client&inactive=false&hideinternal=false&serviceaccounts=true&nonserviceaccounts=true&clientid=${client.id}`}
                                 target="_blank"
@@ -1529,34 +1539,44 @@ export function SyncDashboard() {
                                   );
                                   return clientDocUrls.length > 0 ? (
                                     <div className="space-y-2">
-                                      {clientDocUrls.map((doc: { document_id: string; document_url: string; document_title: string; created_at: string }, index: number) => (
-                                        <div
-                                          key={index}
-                                          className="flex items-center justify-between p-2 bg-background rounded border"
-                                        >
-                                          <div className="truncate">
-                                            <p className="font-medium">
-                                              {doc.document_title ||
-                                                `Document ${index + 1}`}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                              {new Date(
-                                                doc.created_at
-                                              ).toLocaleDateString()}
-                                            </p>
+                                      {clientDocUrls.map(
+                                        (
+                                          doc: {
+                                            document_id: string;
+                                            document_url: string;
+                                            document_title: string;
+                                            created_at: string;
+                                          },
+                                          index: number
+                                        ) => (
+                                          <div
+                                            key={index}
+                                            className="flex items-center justify-between p-2 bg-background rounded border"
+                                          >
+                                            <div className="truncate">
+                                              <p className="font-medium">
+                                                {doc.document_title ||
+                                                  `Document ${index + 1}`}
+                                              </p>
+                                              <p className="text-xs text-muted-foreground">
+                                                {new Date(
+                                                  doc.created_at
+                                                ).toLocaleDateString()}
+                                              </p>
+                                            </div>
+                                            <div className="flex space-x-2">
+                                              <a
+                                                href={doc.document_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="p-1 hover:bg-accent rounded"
+                                              >
+                                                <ExternalLink className="h-4 w-4" />
+                                              </a>
+                                            </div>
                                           </div>
-                                          <div className="flex space-x-2">
-                                            <a
-                                              href={doc.document_url}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="p-1 hover:bg-accent rounded"
-                                            >
-                                              <ExternalLink className="h-4 w-4" />
-                                            </a>
-                                          </div>
-                                        </div>
-                                      ))}
+                                        )
+                                      )}
                                     </div>
                                   ) : (
                                     <div className="text-center py-4 text-muted-foreground">
@@ -2053,15 +2073,6 @@ export function SyncDashboard() {
                   </Button>
                 ) : (
                   <>
-                    <Button
-                      onClick={handlePreview}
-                      variant="secondary"
-                      className="mr-2"
-                      disabled={!documentCreated}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      Preview
-                    </Button>
                     <Button variant="outline" className="mr-2" asChild>
                       <a
                         href={`https://app.juro.com/sign/${createdDocumentId}`}
@@ -2072,14 +2083,7 @@ export function SyncDashboard() {
                         Open in Juro
                       </a>
                     </Button>
-                    <Button
-                      onClick={handleDownload}
-                      variant="secondary"
-                      disabled={!documentCreated}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
+
                     <Button
                       onClick={handleSendForSigning}
                       disabled={!documentCreated}
@@ -2099,27 +2103,36 @@ export function SyncDashboard() {
                 >
                   Back to Templates
                 </Button>
-                <Button
-                  onClick={handlePreview}
-                  variant="secondary"
-                  className="mr-2"
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  Preview
-                </Button>
-                <Button
-                  onClick={handleCreateDocument}
-                  disabled={isCreatingDocument}
-                >
-                  {isCreatingDocument ? (
-                    <>
-                      <div className="animate-spin h-4 w-4 mr-2 border-2 border-t-transparent rounded-full" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>Create Document</>
-                  )}
-                </Button>
+                {!documentCreated && (
+                  <Button
+                    onClick={handleCreateDocument}
+                    disabled={isCreatingDocument}
+                  >
+                    {isCreatingDocument ? (
+                      <>
+                        <div className="animate-spin h-4 w-4 mr-2 border-2 border-t-transparent rounded-full" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>Create Document</>
+                    )}
+                  </Button>
+                )}
+
+                {documentCreated && (
+                  <>
+                    <Button variant="outline" className="mr-2" asChild>
+                      <a
+                        href={`https://app.juro.com/sign/${createdDocumentId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open in Juro
+                      </a>
+                    </Button>
+                  </>
+                )}
               </>
             ) : (
               <Button
@@ -2222,13 +2235,7 @@ export function SyncDashboard() {
           </Table>
         </DialogContent>
       </Dialog>
-      {showPreview && (
-        <PdfPreview
-          pdfData={previewData}
-          filename={previewFilename}
-          onClose={closePreview}
-        />
-      )}
+
       <ToastContainer />
 
       {/* Signature Modal */}
@@ -2257,12 +2264,15 @@ export function SyncDashboard() {
 
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="signature-canvas" className="text-base mb-2 block">
+                  <Label
+                    htmlFor="signature-canvas"
+                    className="text-base mb-2 block"
+                  >
                     Draw your signature below
                   </Label>
                   <div className="bg-secondary/20 rounded-lg p-4">
                     <div className="bg-white border-2 border-dashed border-primary/40 rounded-md overflow-hidden">
-                      <canvas 
+                      <canvas
                         id="signature-canvas"
                         ref={signatureCanvasRef}
                         width={500}
@@ -2271,15 +2281,15 @@ export function SyncDashboard() {
                         onMouseDown={(e) => {
                           const canvas = signatureCanvasRef.current;
                           if (canvas) {
-                            const ctx = canvas.getContext('2d');
+                            const ctx = canvas.getContext("2d");
                             if (ctx) {
                               ctx.beginPath();
 
                               // Set up drawing properties for better signature experience
                               ctx.lineWidth = 2.5;
-                              ctx.lineCap = 'round';
-                              ctx.lineJoin = 'round';
-                              ctx.strokeStyle = '#1a1a1a';
+                              ctx.lineCap = "round";
+                              ctx.lineJoin = "round";
+                              ctx.strokeStyle = "#1a1a1a";
 
                               // Get mouse position
                               const rect = canvas.getBoundingClientRect();
@@ -2293,14 +2303,16 @@ export function SyncDashboard() {
 
                               const handleMove = (e: MouseEvent) => {
                                 if (ctx) {
-                                  const currentX = (e.clientX - rect.left) * scaleX;
-                                  const currentY = (e.clientY - rect.top) * scaleY;
+                                  const currentX =
+                                    (e.clientX - rect.left) * scaleX;
+                                  const currentY =
+                                    (e.clientY - rect.top) * scaleY;
 
                                   // Use quadratic curves for smoother signature
                                   ctx.quadraticCurveTo(
-                                    lastX, 
-                                    lastY, 
-                                    (lastX + currentX) / 2, 
+                                    lastX,
+                                    lastY,
+                                    (lastX + currentX) / 2,
                                     (lastY + currentY) / 2
                                   );
 
@@ -2311,13 +2323,22 @@ export function SyncDashboard() {
                               };
 
                               const handleEnd = () => {
-                                document.removeEventListener('mousemove', handleMove);
-                                document.removeEventListener('mouseup', handleEnd);
+                                document.removeEventListener(
+                                  "mousemove",
+                                  handleMove
+                                );
+                                document.removeEventListener(
+                                  "mouseup",
+                                  handleEnd
+                                );
                                 captureSignature();
                               };
 
-                              document.addEventListener('mousemove', handleMove);
-                              document.addEventListener('mouseup', handleEnd);
+                              document.addEventListener(
+                                "mousemove",
+                                handleMove
+                              );
+                              document.addEventListener("mouseup", handleEnd);
                             }
                           }
                         }}
@@ -2326,37 +2347,41 @@ export function SyncDashboard() {
                           e.preventDefault();
                           const canvas = signatureCanvasRef.current;
                           if (canvas) {
-                            const ctx = canvas.getContext('2d');
+                            const ctx = canvas.getContext("2d");
                             if (ctx && e.touches[0]) {
                               ctx.beginPath();
 
                               // Set up drawing properties
                               ctx.lineWidth = 2.5;
-                              ctx.lineCap = 'round';
-                              ctx.lineJoin = 'round';
-                              ctx.strokeStyle = '#1a1a1a';
+                              ctx.lineCap = "round";
+                              ctx.lineJoin = "round";
+                              ctx.strokeStyle = "#1a1a1a";
 
                               // Get touch position
                               const rect = canvas.getBoundingClientRect();
                               const scaleX = canvas.width / rect.width;
                               const scaleY = canvas.height / rect.height;
 
-                              let lastX = (e.touches[0].clientX - rect.left) * scaleX;
-                              let lastY = (e.touches[0].clientY - rect.top) * scaleY;
+                              let lastX =
+                                (e.touches[0].clientX - rect.left) * scaleX;
+                              let lastY =
+                                (e.touches[0].clientY - rect.top) * scaleY;
 
                               ctx.moveTo(lastX, lastY);
 
                               const handleTouchMove = (e: TouchEvent) => {
                                 e.preventDefault();
                                 if (ctx && e.touches[0]) {
-                                  const currentX = (e.touches[0].clientX - rect.left) * scaleX;
-                                  const currentY = (e.touches[0].clientY - rect.top) * scaleY;
+                                  const currentX =
+                                    (e.touches[0].clientX - rect.left) * scaleX;
+                                  const currentY =
+                                    (e.touches[0].clientY - rect.top) * scaleY;
 
                                   // Use quadratic curves for smoother signature
                                   ctx.quadraticCurveTo(
-                                    lastX, 
-                                    lastY, 
-                                    (lastX + currentX) / 2, 
+                                    lastX,
+                                    lastY,
+                                    (lastX + currentX) / 2,
                                     (lastY + currentY) / 2
                                   );
 
@@ -2367,13 +2392,25 @@ export function SyncDashboard() {
                               };
 
                               const handleTouchEnd = () => {
-                                canvas.removeEventListener('touchmove', handleTouchMove);
-                                canvas.removeEventListener('touchend', handleTouchEnd);
+                                canvas.removeEventListener(
+                                  "touchmove",
+                                  handleTouchMove
+                                );
+                                canvas.removeEventListener(
+                                  "touchend",
+                                  handleTouchEnd
+                                );
                                 captureSignature();
                               };
 
-                              canvas.addEventListener('touchmove', handleTouchMove);
-                              canvas.addEventListener('touchend', handleTouchEnd);
+                              canvas.addEventListener(
+                                "touchmove",
+                                handleTouchMove
+                              );
+                              canvas.addEventListener(
+                                "touchend",
+                                handleTouchEnd
+                              );
                             }
                           }
                         }}
@@ -2381,10 +2418,12 @@ export function SyncDashboard() {
                     </div>
 
                     <div className="flex justify-between items-center mt-3">
-                      <p className="text-xs text-muted-foreground italic">Sign above using mouse or touch</p>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
+                      <p className="text-xs text-muted-foreground italic">
+                        Sign above using mouse or touch
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={clearSignature}
                         className="h-8 text-xs"
                       >
@@ -2403,7 +2442,8 @@ export function SyncDashboard() {
                     <div className="space-y-1 text-sm">
                       <h4 className="font-medium">What happens next?</h4>
                       <p className="text-muted-foreground">
-                        After signing, you can download the document, open it in Juro, or automatically send it for external signing.
+                        After signing, you can download the document, open it in
+                        Juro, or automatically send it for external signing.
                       </p>
 
                       <div className="flex items-center pt-2">
@@ -2417,7 +2457,10 @@ export function SyncDashboard() {
                           }}
                           className="mr-2"
                         />
-                        <Label htmlFor="auto-send-modal" className="text-sm cursor-pointer">
+                        <Label
+                          htmlFor="auto-send-modal"
+                          className="text-sm cursor-pointer"
+                        >
                           Automatically send for external signing
                         </Label>
                       </div>
@@ -2441,14 +2484,14 @@ export function SyncDashboard() {
             </div>
 
             <DialogFooter className="gap-2 sm:gap-0">
-              <Button 
+              <Button
                 variant="outline"
                 onClick={() => setShowSignatureModal(false)}
               >
                 Skip for now
               </Button>
-              <Button 
-                onClick={handleInternalSign} 
+              <Button
+                onClick={handleInternalSign}
                 disabled={signingInProgress || !signatureData}
                 className="min-w-[150px]"
               >
@@ -2472,9 +2515,9 @@ export function SyncDashboard() {
       {/* Settings Dialog */}
       <Dialog>
         <DialogTrigger asChild>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="fixed bottom-4 right-4 z-10"
           >
             <Settings className="h-4 w-4 mr-2" />
