@@ -962,76 +962,50 @@ export function SyncDashboard() {
   const validateFields = () => {
     const errors: string[] = [];
 
-    // Validate document title
+    // Check if document title is present
     if (!documentTitle.trim()) {
       errors.push("Document title is required");
+      toast.error("Document title is required");
+      return false;
     }
 
-    // Validate special questions that don't have field mappings
+    // Check if a client is selected
+    if (!selectedClient) {
+      errors.push("Please select a client first");
+      toast.error("Please select a client first");
+      return false;
+    }
+
+    // Check if the client has a company name (required for counterparty_legal_name)
+    if (!selectedClient?.oppcompanyname && !selectedClient?.client_name) {
+      errors.push("Client must have a company name");
+      toast.error("Client must have a company name");
+      return false;
+    }
+
+    // Validate required fields
     templateQuestions.forEach((question) => {
-      if (question.isRequired && !question.fieldUid) {
-        // Skip validation for signatory fields as they have defaults
-        if (["signatory_name", "signatory_email"].includes(question.uid)) {
-          return;
-        }
-
-        // Check if counterparty_legal_name has a value
-        if (
-          question.uid === "counterparty_legal_name" &&
-          !documentFields[question.uid]?.trim()
-        ) {
-          errors.push(
-            `${question.title || "Counterparty Legal Name"} is required`
-          );
-        }
-
-        // For other special questions
-        else if (!documentFields[question.uid]?.trim()) {
-          errors.push(`${question.title} is required`);
-        }
+      if (!question.isRequired) return;
+      
+      // Special handling for required fields
+      if (question.uid === "counterparty_legal_name") {
+        // This will be handled by JuroContractCreator
+        return;
       }
-    });
-
-    // Validate required template fields that have field mappings
-    templateQuestions.forEach((question) => {
-      if (question.isRequired && question.fieldUid) {
-        // Find the corresponding field
+      
+      if (question.fieldUid && !documentFields[question.fieldUid]) {
         const field = templateFields.find((f) => f.uid === question.fieldUid);
-
-        // Skip validation for fields that the current signing side isn't responsible for
-        const isOurQuestion =
-          !question.signingSideUids ||
-          question.signingSideUids.length === 0 ||
-          question.signingSideUids.includes(
-            "079c85c7-9cad-46e1-a3f8-c68af9026f0c"
-          ); // CST side UID
-
-        if (!isOurQuestion) {
-          return; // Skip validation for questions not on our side
-        }
-
-        if (!documentFields[question.fieldUid]?.trim()) {
-          const fieldTitle =
-            field?.title || question.title || question.fieldUid;
-          errors.push(`${fieldTitle} is required`);
-        }
+        const fieldName = field?.title || question.title || "Unknown field";
+        errors.push(`${fieldName} is required`);
       }
     });
 
-    // Log validation results for debugging
     if (errors.length > 0) {
-      console.log("Validation errors:", errors);
-
-      // Show errors as toasts
-      errors.forEach((error) => {
-        toast.error(error);
-      });
-    } else {
-      console.log("Document validation passed");
+      toast.error(`Please fix the following errors: ${errors.join(", ")}`);
+      return false;
     }
 
-    setValidationErrors(errors);
-    return errors.length === 0;
+    return true;
   };
 
   const handlePreview = () => {
@@ -1646,7 +1620,7 @@ export function SyncDashboard() {
 
                     {selectedTemplate === "custom" && (
                       <div className="whitespace-pre-wrap mt-4 border-t pt-4">
-                        <h4 className="font-bold mb-2">Custom Content:</h4>
+                        <h4 className="font-bold">Custom Content:</h4>
                         {customTemplate}
                       </div>
                     )}
