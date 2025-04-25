@@ -611,7 +611,8 @@ export default function CreateDocumentPage() {
         setCreatedDocumentId(data.id);
         setDocumentCreated(true);
         setShowSuccessDialog(true);
-        setDocumentUrl(data.viewUrl || "");
+        // Format the document URL correctly using the ID
+        setDocumentUrl(`https://app.juro.com/sign/${data.id}`);
         toast.success("Document created successfully!");
       })
       .catch((error) => {
@@ -1387,58 +1388,6 @@ export default function CreateDocumentPage() {
                   </a>
                 </div>
               </div>
-
-              <DialogFooter className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  variant="outline"
-                  className="sm:flex-1"
-                  onClick={handleDownloadDocument}
-                  disabled={isDownloading}
-                >
-                  {isDownloading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Downloading...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4 mr-2" />
-                      Download PDF
-                    </>
-                  )}
-                </Button>
-                <Button
-                  className="sm:flex-1"
-                  onClick={handleSendForSigning}
-                  disabled={isSendingForSigning}
-                >
-                  {isSendingForSigning ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Sending...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4 mr-2" />
-                      Send for Signing
-                    </>
-                  )}
-                </Button>
-                <Button
-                  className="sm:flex-1"
-                  onClick={handleAddToAllops}
-                  disabled={isAddingToAllops}
-                >
-                  {isAddingToAllops ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Adding to Allops...
-                    </>
-                  ) : (
-                    "Add to Allops"
-                  )}
-                </Button>
-              </DialogFooter>
             </DialogContent>
           </Dialog>
         </>
