@@ -77,7 +77,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { JuroContractCreator } from "./juroContractCreator";
+import { JuroContractCreatorTwo } from "./juroContractCreator";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@radix-ui/react-select";
 
@@ -361,7 +361,7 @@ export function SyncDashboard() {
 
     try {
       // Use the helper to create a contract with proper signing side handling
-      const requestData = JuroContractCreator.createContractPayload(
+      const requestData = JuroContractCreatorTwo.createContractPayload(
         selectedTemplate,
         documentTitle,
         documentFields,
@@ -492,7 +492,7 @@ export function SyncDashboard() {
 
     try {
       // Use the helper to create a signing request
-      const signingData = JuroContractCreator.createSigningRequest(
+      const signingData = JuroContractCreatorTwo.createSigningRequest(
         documentFields,
         templateFields,
         selectedClient,
@@ -962,50 +962,76 @@ export function SyncDashboard() {
   const validateFields = () => {
     const errors: string[] = [];
 
-    // Check if document title is present
+    // Validate document title
     if (!documentTitle.trim()) {
       errors.push("Document title is required");
-      toast.error("Document title is required");
-      return false;
     }
 
-    // Check if a client is selected
-    if (!selectedClient) {
-      errors.push("Please select a client first");
-      toast.error("Please select a client first");
-      return false;
-    }
-
-    // Check if the client has a company name (required for counterparty_legal_name)
-    if (!selectedClient?.oppcompanyname && !selectedClient?.client_name) {
-      errors.push("Client must have a company name");
-      toast.error("Client must have a company name");
-      return false;
-    }
-
-    // Validate required fields
+    // Validate special questions that don't have field mappings
     templateQuestions.forEach((question) => {
-      if (!question.isRequired) return;
-      
-      // Special handling for required fields
-      if (question.uid === "counterparty_legal_name") {
-        // This will be handled by JuroContractCreator
-        return;
-      }
-      
-      if (question.fieldUid && !documentFields[question.fieldUid]) {
-        const field = templateFields.find((f) => f.uid === question.fieldUid);
-        const fieldName = field?.title || question.title || "Unknown field";
-        errors.push(`${fieldName} is required`);
+      if (question.isRequired && !question.fieldUid) {
+        // Skip validation for signatory fields as they have defaults
+        if (["signatory_name", "signatory_email"].includes(question.uid)) {
+          return;
+        }
+
+        // Check if counterparty_legal_name has a value
+        if (
+          question.uid === "counterparty_legal_name" &&
+          !documentFields[question.uid]?.trim()
+        ) {
+          errors.push(
+            `${question.title || "Counterparty Legal Name"} is required`
+          );
+        }
+
+        // For other special questions
+        else if (!documentFields[question.uid]?.trim()) {
+          errors.push(`${question.title} is required`);
+        }
       }
     });
 
+    // Validate required template fields that have field mappings
+    templateQuestions.forEach((question) => {
+      if (question.isRequired && question.fieldUid) {
+        // Find the corresponding field
+        const field = templateFields.find((f) => f.uid === question.fieldUid);
+
+        // Skip validation for fields that the current signing side isn't responsible for
+        const isOurQuestion =
+          !question.signingSideUids ||
+          question.signingSideUids.length === 0 ||
+          question.signingSideUids.includes(
+            "079c85c7-9cad-46e1-a3f8-c68af9026f0c"
+          ); // CST side UID
+
+        if (!isOurQuestion) {
+          return; // Skip validation for questions not on our side
+        }
+
+        if (!documentFields[question.fieldUid]?.trim()) {
+          const fieldTitle =
+            field?.title || question.title || question.fieldUid;
+          errors.push(`${fieldTitle} is required`);
+        }
+      }
+    });
+
+    // Log validation results for debugging
     if (errors.length > 0) {
-      toast.error(`Please fix the following errors: ${errors.join(", ")}`);
-      return false;
+      console.log("Validation errors:", errors);
+
+      // Show errors as toasts
+      errors.forEach((error) => {
+        toast.error(error);
+      });
+    } else {
+      console.log("Document validation passed");
     }
 
-    return true;
+    setValidationErrors(errors);
+    return errors.length === 0;
   };
 
   const handlePreview = () => {
@@ -1620,7 +1646,7 @@ export function SyncDashboard() {
 
                     {selectedTemplate === "custom" && (
                       <div className="whitespace-pre-wrap mt-4 border-t pt-4">
-                        <h4 className="font-bold">Custom Content:</h4>
+                        <h4 className="font-bold mb-2">Custom Content:</h4>
                         {customTemplate}
                       </div>
                     )}
