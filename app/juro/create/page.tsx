@@ -21,13 +21,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -40,23 +34,30 @@ import {
   sendContractForSigning,
   downloadContractPdf,
   autofillContract,
-  clearAutofilledContract
+  clearAutofilledContract,
 } from "@/slices/juro/juroSlice";
 import { fetchHaloTicketById } from "@/slices/halo/haloSlice";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { 
-  ArrowLeft, 
-  FileText, 
-  Send, 
-  Download, 
+import {
+  ArrowLeft,
+  FileText,
+  Send,
+  Download,
   ExternalLink,
   CheckCircle,
   AlertCircle,
   Loader2,
-  Bug
+  Bug,
 } from "lucide-react";
 import Link from "next/link";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface TemplateField {
   title: string;
@@ -77,29 +78,36 @@ interface TemplateQuestion {
 export default function CreateDocumentPage() {
   const searchParams = useSearchParams();
   const rawTicketId = searchParams.get("ticket_id");
-  
+
   // Fix the ticket ID parsing to handle values like {0717670}
-  const ticketId = rawTicketId 
-    ? parseInt(rawTicketId.replace(/[{}]/g, '').replace(/^0+/, ''), 10) || null 
+  const ticketId = rawTicketId
+    ? parseInt(rawTicketId.replace(/[{}]/g, "").replace(/^0+/, ""), 10) || null
     : null;
-  
+
   const templateIdFromUrl = searchParams.get("template_id")
-    ? searchParams.get("template_id")?.replace(/[{}]/g, '')
+    ? searchParams.get("template_id")?.replace(/[{}]/g, "")
     : null;
-  
+
   // Debug logger
   const debugLog = useCallback((stage: string, data: any) => {
     console.log(`[DEBUG:${stage}]`, data);
-    toast.info(`🐞 ${stage}: ${typeof data === 'object' ? JSON.stringify(data).substring(0, 50) + '...' : data}`, {
-      autoClose: 3000,
-      position: "bottom-right",
-      className: "debug-toast",
-    });
+    toast.info(
+      `🐞 ${stage}: ${
+        typeof data === "object"
+          ? JSON.stringify(data).substring(0, 50) + "..."
+          : data
+      }`,
+      {
+        autoClose: 3000,
+        position: "bottom-right",
+        className: "debug-toast",
+      }
+    );
   }, []);
-  
+
   // Step tracking
   const [currentStep, setCurrentStep] = useState(1); // 1: Template Selection, 2: Form Filling
-  
+
   // Loading states
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isTicketLoading, setIsTicketLoading] = useState(true);
@@ -110,39 +118,51 @@ export default function CreateDocumentPage() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isAddingToAllops, setIsAddingToAllops] = useState(false);
   const [isAutofilling, setIsAutofilling] = useState(false);
-  
+
   // State for the template selection
   const [selectedTemplate, setSelectedTemplate] = useState("");
-  
+
   // States for document creation
   const [documentTitle, setDocumentTitle] = useState("");
   const [documentDescription, setDocumentDescription] = useState("");
-  const [documentFields, setDocumentFields] = useState<Record<string, string>>({});
+  const [documentFields, setDocumentFields] = useState<Record<string, string>>(
+    {}
+  );
   const [templateFields, setTemplateFields] = useState<TemplateField[]>([]);
-  const [templateQuestions, setTemplateQuestions] = useState<TemplateQuestion[]>([]);
+  const [templateQuestions, setTemplateQuestions] = useState<
+    TemplateQuestion[]
+  >([]);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [createdDocumentId, setCreatedDocumentId] = useState<string | null>(null);
+  const [createdDocumentId, setCreatedDocumentId] = useState<string | null>(
+    null
+  );
   const [documentCreated, setDocumentCreated] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [documentUrl, setDocumentUrl] = useState("");
-  const [selectedSignatureProvider, setSelectedSignatureProvider] = useState("docusign");
+  const [selectedSignatureProvider, setSelectedSignatureProvider] =
+    useState("docusign");
 
   // Caching
   const [templateCache, setTemplateCache] = useState<Record<string, any>>({});
-  
+
   const dispatch = useAppDispatch();
-  const { 
-    templates: juroTemplates, 
+  const {
+    templates: juroTemplates,
     status: juroStatus,
-    autofilledContract
+    autofilledContract,
   } = useAppSelector((state) => state.juro);
-  const { ticketById: detailedTicketData, status: haloStatus } = useAppSelector((state) => state.halo);
+  const { ticketById: detailedTicketData, status: haloStatus } = useAppSelector(
+    (state) => state.halo
+  );
 
   // Helper function to get the associated question for a field
-  const getQuestionForField = useCallback((fieldUid: string) => {
-    return templateQuestions.find(q => q.fieldUid === fieldUid);
-  }, [templateQuestions]);
+  const getQuestionForField = useCallback(
+    (fieldUid: string) => {
+      return templateQuestions.find((q) => q.fieldUid === fieldUid);
+    },
+    [templateQuestions]
+  );
 
   // Helper to group fields by category
   const groupFieldsByCategory = useCallback(() => {
@@ -151,19 +171,35 @@ export default function CreateDocumentPage() {
       company: [],
       contract: [],
       signatory: [],
-      other: []
+      other: [],
     };
 
-    templateFields.forEach(field => {
+    templateFields.forEach((field) => {
       const title = field.title.toLowerCase();
-      
-      if (title.includes('client') || title.includes('counterparty') || title.includes('customer')) {
+
+      if (
+        title.includes("client") ||
+        title.includes("counterparty") ||
+        title.includes("customer")
+      ) {
         groups.client.push(field);
-      } else if (title.includes('company') || title.includes('cst') || title.includes('organization')) {
+      } else if (
+        title.includes("company") ||
+        title.includes("cst") ||
+        title.includes("organization")
+      ) {
         groups.company.push(field);
-      } else if (title.includes('contract') || title.includes('quote') || title.includes('agreement')) {
+      } else if (
+        title.includes("contract") ||
+        title.includes("quote") ||
+        title.includes("agreement")
+      ) {
         groups.contract.push(field);
-      } else if (title.includes('signatory') || title.includes('signature') || title.includes('signing')) {
+      } else if (
+        title.includes("signatory") ||
+        title.includes("signature") ||
+        title.includes("signing")
+      ) {
         groups.signatory.push(field);
       } else {
         groups.other.push(field);
@@ -177,146 +213,189 @@ export default function CreateDocumentPage() {
   }, [templateFields]);
 
   // Simplify the loadTemplateDetails function
-  const loadTemplateDetails = useCallback((templateId: string) => {
-    setIsLoadingTemplate(true);
-    debugLog("Loading Template", `Template ID: ${templateId}`);
-    
-    // If we already have the template in cache, use it
-    if (templateCache[templateId]) {
-      debugLog("Template Cache Hit", `Using cached template: ${templateId}`);
-      console.log(`Using cached template: ${templateId}`);
-      // Only set basic template structure - autofill will handle the values
-      setTemplateFields(templateCache[templateId].fields || []);
-      setTemplateQuestions(templateCache[templateId].questions || []);
-      setIsLoadingTemplate(false);
-      return;
-    }
+  const loadTemplateDetails = useCallback(
+    (templateId: string) => {
+      setIsLoadingTemplate(true);
+      debugLog("Loading Template", `Template ID: ${templateId}`);
 
-    // Fetch the template from the API
-    debugLog("Template API Call", `Fetching template: ${templateId}`);
-    dispatch(fetchJuroTemplate(templateId))
-      .unwrap()
-      .then((template) => {
-        debugLog("Template Loaded", `Template name: ${template.name}`);
-        // Cache the template for future use
-        setTemplateCache((prev) => ({
-          ...prev,
-          [templateId]: template,
-        }));
-        
+      // If we already have the template in cache, use it
+      if (templateCache[templateId]) {
+        debugLog("Template Cache Hit", `Using cached template: ${templateId}`);
+        console.log(`Using cached template: ${templateId}`);
         // Only set basic template structure - autofill will handle the values
-        setTemplateFields(template.fields || []);
-        setTemplateQuestions(template.questions || []);
+        setTemplateFields(templateCache[templateId].fields || []);
+        setTemplateQuestions(templateCache[templateId].questions || []);
         setIsLoadingTemplate(false);
-      })
-      .catch((error) => {
-        console.error(`Error loading template ${templateId}:`, error);
-        debugLog("Template Error", `Failed to load template: ${error.message || JSON.stringify(error)}`);
-        toast.error("Failed to load template details");
-        setIsLoadingTemplate(false);
-      });
-  }, [dispatch, templateCache, debugLog]);
+        return;
+      }
+
+      // Fetch the template from the API
+      debugLog("Template API Call", `Fetching template: ${templateId}`);
+      dispatch(fetchJuroTemplate(templateId))
+        .unwrap()
+        .then((template) => {
+          debugLog("Template Loaded", `Template name: ${template.name}`);
+          // Cache the template for future use
+          setTemplateCache((prev) => ({
+            ...prev,
+            [templateId]: template,
+          }));
+
+          // Only set basic template structure - autofill will handle the values
+          setTemplateFields(template.fields || []);
+          setTemplateQuestions(template.questions || []);
+          setIsLoadingTemplate(false);
+        })
+        .catch((error) => {
+          console.error(`Error loading template ${templateId}:`, error);
+          debugLog(
+            "Template Error",
+            `Failed to load template: ${error.message || JSON.stringify(error)}`
+          );
+          toast.error("Failed to load template details");
+          setIsLoadingTemplate(false);
+        });
+    },
+    [dispatch, templateCache, debugLog]
+  );
 
   // Create a shared function for autofill logic to avoid duplication
-  const performAutofill = useCallback((templateId: string) => {
-    if (!templateId || !ticketId) {
-      debugLog("Autofill Failed", `Missing data - Template ID: ${templateId}, Ticket ID: ${ticketId}`);
-      return Promise.reject("Missing template ID or ticket ID");
-    }
-    
-    setIsLoadingTemplate(true);
-    setIsAutofilling(true);
-    debugLog("Autofill Started", `Template: ${templateId}, Ticket: ${ticketId}`);
-    
-    // Clear any previous autofilled data
-    dispatch(clearAutofilledContract());
-    
-    const autofillData = {
-      template_id: templateId,
-      ticket_id: ticketId
-    };
-    
-    debugLog("Autofill Dispatch", autofillData);
-    // Use the autofill function to intelligently populate fields
-    return dispatch(autofillContract(autofillData))
-      .unwrap()
-      .then(result => {
-        if (result) {
-          debugLog("Autofill Success", `Fields count: ${result.fields?.length || 0}`);
-          console.log("Autofill completed successfully:", result);
-          toast.success("Successfully auto-filled template with ticket data");
-          
-          // Set document title based on template name
-          setDocumentTitle(`${result.name || 'Contract'} - ${detailedTicketData?.oppcompanyname || 'Client'}`);
-          
-          // Extract fields from the autofilled contract
-          if (result.fields) {
-            setTemplateFields(result.fields);
-            
-            // Convert fields to documentFields format
-            const newDocumentFields: Record<string, string> = {};
-            result.fields.forEach((field: TemplateField) => {
-              if (field.value !== undefined) {
-                newDocumentFields[field.uid] = field.value;
-              }
-            });
-            setDocumentFields(newDocumentFields);
+  const performAutofill = useCallback(
+    (templateId: string) => {
+      if (!templateId || !ticketId) {
+        debugLog(
+          "Autofill Failed",
+          `Missing data - Template ID: ${templateId}, Ticket ID: ${ticketId}`
+        );
+        return Promise.reject("Missing template ID or ticket ID");
+      }
+
+      setIsLoadingTemplate(true);
+      setIsAutofilling(true);
+      debugLog(
+        "Autofill Started",
+        `Template: ${templateId}, Ticket: ${ticketId}`
+      );
+
+      // Clear any previous autofilled data
+      dispatch(clearAutofilledContract());
+
+      const autofillData = {
+        template_id: templateId,
+        ticket_id: ticketId,
+      };
+
+      debugLog("Autofill Dispatch", autofillData);
+      // Use the autofill function to intelligently populate fields
+      return dispatch(autofillContract(autofillData))
+        .unwrap()
+        .then((result) => {
+          if (result) {
+            debugLog(
+              "Autofill Success",
+              `Fields count: ${result.fields?.length || 0}`
+            );
+            console.log("Autofill completed successfully:", result);
+            toast.success("Successfully auto-filled template with ticket data");
+
+            // Set document title based on template name
+            setDocumentTitle(
+              `${result.name || "Contract"} - ${
+                detailedTicketData?.oppcompanyname || "Client"
+              }`
+            );
+
+            // Extract fields from the autofilled contract
+            if (result.fields) {
+              setTemplateFields(result.fields);
+
+              // Convert fields to documentFields format
+              const newDocumentFields: Record<string, string> = {};
+              result.fields.forEach((field: TemplateField) => {
+                if (field.value !== undefined) {
+                  newDocumentFields[field.uid] = field.value;
+                }
+              });
+              setDocumentFields(newDocumentFields);
+            }
+
+            // Extract questions
+            if (result.questions) {
+              setTemplateQuestions(result.questions);
+            }
+
+            // Move to next step
+            setCurrentStep(2);
+            return result;
           }
-          
-          // Extract questions
-          if (result.questions) {
-            setTemplateQuestions(result.questions);
-          }
-          
-          // Move to next step
-          setCurrentStep(2);
-          return result;
-        }
-        debugLog("Autofill Empty", "No result data received");
-        toast.warn("Auto-fill completed but no data was returned");
-        return null;
-      })
-      .catch(error => {
-        console.error("Error auto-filling template:", error);
-        debugLog("Autofill Error", `${error.message || JSON.stringify(error)}`);
-        toast.error("Failed to auto-fill template with ticket data.");
-        
-        // Fall back to regular template loading
-        loadTemplateDetails(templateId);
-        throw error;
-      })
-      .finally(() => {
-        setIsLoadingTemplate(false);
-        setIsAutofilling(false);
-      });
-  }, [ticketId, detailedTicketData, dispatch, loadTemplateDetails, debugLog]);
+          debugLog("Autofill Empty", "No result data received");
+          toast.warn("Auto-fill completed but no data was returned");
+          return null;
+        })
+        .catch((error) => {
+          console.error("Error auto-filling template:", error);
+          debugLog(
+            "Autofill Error",
+            `${error.message || JSON.stringify(error)}`
+          );
+          toast.error("Failed to auto-fill template with ticket data.");
+
+          // Fall back to regular template loading
+          loadTemplateDetails(templateId);
+          throw error;
+        })
+        .finally(() => {
+          setIsLoadingTemplate(false);
+          setIsAutofilling(false);
+        });
+    },
+    [ticketId, detailedTicketData, dispatch, loadTemplateDetails, debugLog]
+  );
 
   // Process template selection with autofill - use the shared function
-  const handleTemplateSelection = useCallback((templateId: string) => {
-    setSelectedTemplate(templateId);
-    debugLog("Template Selected", templateId);
-    
-    if (!templateId) {
-      debugLog("Template Selection Cancelled", "No template selected");
-      setCurrentStep(1);
-      return;
-    }
-    
-    // Check if ticketId is valid before trying to use it
-    if (ticketId) {
-      debugLog("Ticket Found", `Will try autofill with template ${templateId} and ticket ${ticketId}`);
-      toast.info(`Starting autofill for template ${templateId} with ticket ${ticketId}`);
-      performAutofill(templateId).catch(err => {
-        debugLog("Template Selection Error", `Failed to handle template selection: ${err.message || JSON.stringify(err)}`);
-        console.error("Failed to handle template selection:", err);
-      });
-    } else {
-      debugLog("No Ticket ID for Autofill", `Ticket value: ${rawTicketId} parsed to ${ticketId}`);
-      toast.warning("No valid ticket ID found. Autofill cannot be performed.");
-      // If no ticket ID is provided, load the template details normally
-      loadTemplateDetails(templateId);
-    }
-  }, [ticketId, rawTicketId, performAutofill, loadTemplateDetails, debugLog]);
+  const handleTemplateSelection = useCallback(
+    (templateId: string) => {
+      setSelectedTemplate(templateId);
+      debugLog("Template Selected", templateId);
+
+      if (!templateId) {
+        debugLog("Template Selection Cancelled", "No template selected");
+        setCurrentStep(1);
+        return;
+      }
+
+      // Check if ticketId is valid before trying to use it
+      if (ticketId) {
+        debugLog(
+          "Ticket Found",
+          `Will try autofill with template ${templateId} and ticket ${ticketId}`
+        );
+        toast.info(
+          `Starting autofill for template ${templateId} with ticket ${ticketId}`
+        );
+        performAutofill(templateId).catch((err) => {
+          debugLog(
+            "Template Selection Error",
+            `Failed to handle template selection: ${
+              err.message || JSON.stringify(err)
+            }`
+          );
+          console.error("Failed to handle template selection:", err);
+        });
+      } else {
+        debugLog(
+          "No Ticket ID for Autofill",
+          `Ticket value: ${rawTicketId} parsed to ${ticketId}`
+        );
+        toast.warning(
+          "No valid ticket ID found. Autofill cannot be performed."
+        );
+        // If no ticket ID is provided, load the template details normally
+        loadTemplateDetails(templateId);
+      }
+    },
+    [ticketId, rawTicketId, performAutofill, loadTemplateDetails, debugLog]
+  );
 
   // Auto-select template and autofill if template_id is provided in URL
   useEffect(() => {
@@ -324,15 +403,23 @@ export default function CreateDocumentPage() {
       templateIdFromUrl,
       ticketId,
       hasDetailedTicketData: !!detailedTicketData,
-      allConditionsMet: !!(templateIdFromUrl && ticketId && detailedTicketData)
+      allConditionsMet: !!(templateIdFromUrl && ticketId && detailedTicketData),
     });
-    
+
     if (templateIdFromUrl && ticketId && detailedTicketData) {
-      debugLog("URL Params", `Template: ${templateIdFromUrl}, Ticket: ${ticketId}`);
+      debugLog(
+        "URL Params",
+        `Template: ${templateIdFromUrl}, Ticket: ${ticketId}`
+      );
       setSelectedTemplate(templateIdFromUrl);
       toast.info(`Auto-selecting template ${templateIdFromUrl} from URL`);
-      performAutofill(templateIdFromUrl).catch(err => {
-        debugLog("Autofill Error on Page Load", `Failed to auto-fill on page load: ${err.message || JSON.stringify(err)}`);
+      performAutofill(templateIdFromUrl).catch((err) => {
+        debugLog(
+          "Autofill Error on Page Load",
+          `Failed to auto-fill on page load: ${
+            err.message || JSON.stringify(err)
+          }`
+        );
         console.error("Failed to auto-fill on page load:", err);
       });
     } else {
@@ -341,19 +428,37 @@ export default function CreateDocumentPage() {
       if (!templateIdFromUrl) missingParams.push("template ID");
       if (!ticketId) missingParams.push("ticket ID");
       if (!detailedTicketData) missingParams.push("ticket data");
-      
+
       if (missingParams.length > 0) {
-        debugLog("Autofill Not Triggered", `Missing: ${missingParams.join(", ")}`);
+        debugLog(
+          "Autofill Not Triggered",
+          `Missing: ${missingParams.join(", ")}`
+        );
       }
     }
-  }, [templateIdFromUrl, ticketId, detailedTicketData, performAutofill, debugLog]);
+  }, [
+    templateIdFromUrl,
+    ticketId,
+    detailedTicketData,
+    performAutofill,
+    debugLog,
+  ]);
 
   // Initial data loading
   useEffect(() => {
-    debugLog("Initial Load", `Page initialized with URL params: ${window.location.search}`);
-    debugLog("Raw Ticket ID", `Value: "${rawTicketId}", Type: ${typeof rawTicketId}`);
-    debugLog("Parsed Ticket ID", `Value: ${ticketId}, Type: ${typeof ticketId}`);
-    
+    debugLog(
+      "Initial Load",
+      `Page initialized with URL params: ${window.location.search}`
+    );
+    debugLog(
+      "Raw Ticket ID",
+      `Value: "${rawTicketId}", Type: ${typeof rawTicketId}`
+    );
+    debugLog(
+      "Parsed Ticket ID",
+      `Value: ${ticketId}, Type: ${typeof ticketId}`
+    );
+
     if (ticketId) {
       setIsTicketLoading(true);
       debugLog("Fetching Ticket", `Ticket ID: ${ticketId}`);
@@ -365,7 +470,10 @@ export default function CreateDocumentPage() {
         })
         .catch((error) => {
           console.error("Error fetching ticket:", error);
-          debugLog("Ticket Error", `Failed to fetch ticket: ${error.message || JSON.stringify(error)}`);
+          debugLog(
+            "Ticket Error",
+            `Failed to fetch ticket: ${error.message || JSON.stringify(error)}`
+          );
           toast.error("Error loading ticket details");
           setIsTicketLoading(false);
         });
@@ -384,24 +492,27 @@ export default function CreateDocumentPage() {
       })
       .catch((error) => {
         console.error("Error fetching templates:", error);
-        debugLog("Template List Error", `Failed to fetch templates: ${error.message || JSON.stringify(error)}`);
+        debugLog(
+          "Template List Error",
+          `Failed to fetch templates: ${error.message || JSON.stringify(error)}`
+        );
         toast.error("Error loading document templates");
         setIsTemplatesLoading(false);
       });
-      
+
     setIsPageLoading(false);
   }, [dispatch, ticketId, rawTicketId, debugLog]);
 
   // Handle field change
   const handleFieldChange = (fieldId: string, value: string) => {
-    setDocumentFields(prev => ({
+    setDocumentFields((prev) => ({
       ...prev,
-      [fieldId]: value
+      [fieldId]: value,
     }));
-    
+
     // Clear error when field is updated
     if (fieldErrors[fieldId]) {
-      setFieldErrors(prev => {
+      setFieldErrors((prev) => {
         const newErrors = { ...prev };
         delete newErrors[fieldId];
         return newErrors;
@@ -411,7 +522,7 @@ export default function CreateDocumentPage() {
 
   const handleTitleChange = (value: string) => {
     setDocumentTitle(value);
-    
+
     // Clear validation error for document title if it exists
     if (fieldErrors["document-title"]) {
       const updatedErrors = { ...fieldErrors };
@@ -424,46 +535,63 @@ export default function CreateDocumentPage() {
   const validateFields = useCallback(() => {
     const errors: string[] = [];
     const fieldErrors: Record<string, string> = {};
-    
+
     // Validate required fields
-    templateQuestions.forEach(question => {
+    templateQuestions.forEach((question) => {
+      // Skip validation for signatory fields - these are handled by JuroContractCreator
+      if (
+        question.uid === "signatory_name" ||
+        question.uid === "signatory_email" ||
+        question.fieldUid === "signatory_name" ||
+        question.fieldUid === "signatory_email"
+      ) {
+        return;
+      }
+
       if (question.isRequired && question.fieldUid) {
         const fieldValue = documentFields[question.fieldUid];
         if (!fieldValue) {
-          const field = templateFields.find(f => f.uid === question.fieldUid);
-          const fieldName = field?.title || question.title || 'Unknown field';
+          const field = templateFields.find((f) => f.uid === question.fieldUid);
+          const fieldName = field?.title || question.title || "Unknown field";
           errors.push(`${fieldName} is required`);
-          fieldErrors[question.fieldUid] = 'This field is required';
+          fieldErrors[question.fieldUid] = "This field is required";
         }
       }
     });
-    
-    // Also check special fields that are always required
-    const requiredSpecialFields = ['signatory_name', 'signatory_email'];
-    requiredSpecialFields.forEach(fieldUid => {
-      if (!documentFields[fieldUid]) {
-        errors.push(`${fieldUid.replace('_', ' ')} is required`);
-        fieldErrors[fieldUid] = 'This field is required';
-      }
-    });
-    
+
+    // Validate document title
+    if (!documentTitle.trim()) {
+      errors.push("Document title is required");
+      fieldErrors["document-title"] = "Document title is required";
+    }
+
+    // Do NOT validate signatory fields - they're handled by JuroContractCreator
+    // The previous code that was validating 'signatory_name' and 'signatory_email' has been removed
+
     setValidationErrors(errors);
     setFieldErrors(fieldErrors);
-    
+
     return errors.length === 0;
-  }, [documentFields, templateFields, templateQuestions]);
+  }, [documentFields, templateFields, templateQuestions, documentTitle]);
 
   // Create the contract with proper data
   const createContract = useCallback(() => {
     if (!validateFields()) {
-      debugLog("Validation Failed", `Errors: ${validationErrors.join(', ')}`);
-      toast.error("Please fix the validation errors before creating the document");
+      debugLog("Validation Failed", `Errors: ${validationErrors.join(", ")}`);
+      toast.error(
+        "Please fix the validation errors before creating the document"
+      );
       return;
     }
 
     setIsCreatingDocument(true);
-    debugLog("Creating Document", `Template: ${selectedTemplate}, Fields: ${Object.keys(documentFields).length}`);
-    
+    debugLog(
+      "Creating Document",
+      `Template: ${selectedTemplate}, Fields: ${
+        Object.keys(documentFields).length
+      }`
+    );
+
     // Use JuroContractCreator to generate the proper payload
     const contractData = JuroContractCreator.createContractPayload(
       selectedTemplate,
@@ -475,7 +603,7 @@ export default function CreateDocumentPage() {
     );
 
     debugLog("Contract Data", contractData);
-    
+
     dispatch(createJuroContract(contractData))
       .unwrap()
       .then((data) => {
@@ -483,7 +611,7 @@ export default function CreateDocumentPage() {
         setCreatedDocumentId(data.id);
         setDocumentCreated(true);
         setShowSuccessDialog(true);
-        setDocumentUrl(data.viewUrl || '');
+        setDocumentUrl(data.viewUrl || "");
         toast.success("Document created successfully!");
       })
       .catch((error) => {
@@ -496,16 +624,16 @@ export default function CreateDocumentPage() {
         setIsCreatingDocument(false);
       });
   }, [
-    validateFields, 
-    validationErrors, 
-    selectedTemplate, 
-    documentFields, 
-    documentTitle, 
+    validateFields,
+    validationErrors,
+    selectedTemplate,
+    documentFields,
+    documentTitle,
     templateFields,
     templateQuestions,
     detailedTicketData,
     dispatch,
-    debugLog
+    debugLog,
   ]);
 
   // Handle send for signing
@@ -527,22 +655,24 @@ export default function CreateDocumentPage() {
       );
 
       debugLog("Sending for Signing", signingData);
-      
+
       // We need to use the specific signing UID - using the constant from JuroContractCreator
       const signingUid = JuroContractCreator.COUNTERPARTY_SIDE_UID;
-      
+
       const result = await dispatch(
         sendContractForSigning({
           contractId: createdDocumentId,
           signingUid,
-          data: signingData
+          data: signingData,
         })
       ).unwrap();
 
       toast.success("Document sent for signing!");
       debugLog("Sent for Signing", result);
     } catch (error: any) {
-      toast.error(`Failed to send for signing: ${error.message || "Unknown error"}`);
+      toast.error(
+        `Failed to send for signing: ${error.message || "Unknown error"}`
+      );
       debugLog("Signing Error", error);
     } finally {
       setIsSendingForSigning(false);
@@ -559,23 +689,29 @@ export default function CreateDocumentPage() {
     setIsDownloading(true);
 
     try {
-      const response = await dispatch(downloadContractPdf(createdDocumentId)).unwrap();
-      
+      const response = await dispatch(
+        downloadContractPdf(createdDocumentId)
+      ).unwrap();
+
       // Create a blob URL and trigger download
-      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = `${documentTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`;
+      a.download = `${documentTitle
+        .replace(/[^a-z0-9]/gi, "_")
+        .toLowerCase()}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      
+
       toast.success("Document downloaded successfully");
     } catch (error: any) {
       console.error("Error downloading document:", error);
-      toast.error(`Failed to download document: ${error.message || "Unknown error"}`);
+      toast.error(
+        `Failed to download document: ${error.message || "Unknown error"}`
+      );
     } finally {
       setIsDownloading(false);
     }
@@ -592,164 +728,226 @@ export default function CreateDocumentPage() {
     try {
       // This would be a real API call in production
       // Simulating an API delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
       toast.success(`Added "${documentTitle}" to Allops successfully`);
     } catch (error: any) {
-      toast.error(`Failed to add to Allops: ${error.message || "Unknown error"}`);
+      toast.error(
+        `Failed to add to Allops: ${error.message || "Unknown error"}`
+      );
     } finally {
       setIsAddingToAllops(false);
     }
   };
 
   // Render template field
-  const renderTemplateField = useCallback((field: TemplateField) => {
-    const question = getQuestionForField(field.uid);
-    const hasError = fieldErrors[field.uid] !== undefined;
-    // Create default placeholder text instead of using field.placeholder which doesn't exist
-    const placeholderText = `Enter ${field.title.toLowerCase()}`;
-    
-    // Determine if field is related to specific categories for styling
-    const isClientField = field.title.toLowerCase().includes('client') || 
-                         field.title.toLowerCase().includes('counterparty') || 
-                         field.title.toLowerCase().includes('customer');
-    const isCompanyField = field.title.toLowerCase().includes('company') || 
-                          field.title.toLowerCase().includes('cst') || 
-                          field.title.toLowerCase().includes('organization');
-    const isDateField = field.type === 'date' || field.title.toLowerCase().includes('date');
-    const isSignatoryField = field.title.toLowerCase().includes('signatory') || 
-                            field.title.toLowerCase().includes('signing') || 
-                            field.title.toLowerCase().includes('signature');
-    const isEmailField = field.title.toLowerCase().includes('email');
-    const isMonetaryField = field.title.toLowerCase().includes('price') || 
-                           field.title.toLowerCase().includes('cost') ||
-                           field.title.toLowerCase().includes('fee') ||
-                           field.title.toLowerCase().includes('amount') ||
-                           field.title.toLowerCase().includes('value');
-    
-    // Determine field styling based on category
-    const fieldStyle = isClientField ? 'border-l-4 border-l-blue-400 pl-2' :
-                      isCompanyField ? 'border-l-4 border-l-purple-400 pl-2' :
-                      isSignatoryField ? 'border-l-4 border-l-amber-400 pl-2' :
-                      isDateField ? 'border-l-4 border-l-green-400 pl-2' :
-                      '';
+  const renderTemplateField = useCallback(
+    (field: TemplateField) => {
+      const question = getQuestionForField(field.uid);
+      const hasError = fieldErrors[field.uid] !== undefined;
+      // Create default placeholder text instead of using field.placeholder which doesn't exist
+      const placeholderText = `Enter ${field.title.toLowerCase()}`;
 
-    return (
-      <div key={field.uid} className={`mb-6 rounded-md p-3 transition-colors ${hasError ? 'bg-red-50' : 'hover:bg-slate-50'} ${fieldStyle}`}>
-        <div className="flex flex-col space-y-1.5 mb-2">
-          <Label htmlFor={field.uid} className="text-md font-medium flex items-center">
-            {field.title}
-            {question?.isRequired && <span className="text-red-500 ml-1">*</span>}
-            {isClientField && <Badge variant="outline" className="ml-2 bg-blue-50">Client</Badge>}
-            {isCompanyField && <Badge variant="outline" className="ml-2 bg-purple-50">Company</Badge>}
-            {isSignatoryField && <Badge variant="outline" className="ml-2 bg-amber-50">Signatory</Badge>}
-          </Label>
-          {question?.text && (
-            <p className="text-sm text-muted-foreground">{question.text}</p>
-          )}
-        </div>
-        <div>
-          {field.type === 'textarea' ? (
-            <Textarea
-              id={field.uid}
-              value={documentFields[field.uid] || ''}
-              onChange={(e) => handleFieldChange(field.uid, e.target.value)}
-              className={`w-full ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
-              placeholder={placeholderText}
-              rows={4}
-            />
-          ) : isDateField ? (
-            <div className="relative">
-              <Input
+      // Determine if field is related to specific categories for styling
+      const isClientField =
+        field.title.toLowerCase().includes("client") ||
+        field.title.toLowerCase().includes("counterparty") ||
+        field.title.toLowerCase().includes("customer");
+      const isCompanyField =
+        field.title.toLowerCase().includes("company") ||
+        field.title.toLowerCase().includes("cst") ||
+        field.title.toLowerCase().includes("organization");
+      const isDateField =
+        field.type === "date" || field.title.toLowerCase().includes("date");
+      const isSignatoryField =
+        field.title.toLowerCase().includes("signatory") ||
+        field.title.toLowerCase().includes("signing") ||
+        field.title.toLowerCase().includes("signature");
+      const isEmailField = field.title.toLowerCase().includes("email");
+      const isMonetaryField =
+        field.title.toLowerCase().includes("price") ||
+        field.title.toLowerCase().includes("cost") ||
+        field.title.toLowerCase().includes("fee") ||
+        field.title.toLowerCase().includes("amount") ||
+        field.title.toLowerCase().includes("value");
+
+      // Determine field styling based on category
+      const fieldStyle = isClientField
+        ? "border-l-4 border-l-blue-400 pl-2"
+        : isCompanyField
+        ? "border-l-4 border-l-purple-400 pl-2"
+        : isSignatoryField
+        ? "border-l-4 border-l-amber-400 pl-2"
+        : isDateField
+        ? "border-l-4 border-l-green-400 pl-2"
+        : "";
+
+      return (
+        <div
+          key={field.uid}
+          className={`mb-6 rounded-md p-3 transition-colors ${
+            hasError ? "bg-red-50" : "hover:bg-slate-50"
+          } ${fieldStyle}`}
+        >
+          <div className="flex flex-col space-y-1.5 mb-2">
+            <Label
+              htmlFor={field.uid}
+              className="text-md font-medium flex items-center"
+            >
+              {field.title}
+              {question?.isRequired && (
+                <span className="text-red-500 ml-1">*</span>
+              )}
+              {isClientField && (
+                <Badge variant="outline" className="ml-2 bg-blue-50">
+                  Client
+                </Badge>
+              )}
+              {isCompanyField && (
+                <Badge variant="outline" className="ml-2 bg-purple-50">
+                  Company
+                </Badge>
+              )}
+              {isSignatoryField && (
+                <Badge variant="outline" className="ml-2 bg-amber-50">
+                  Signatory
+                </Badge>
+              )}
+            </Label>
+            {question?.text && (
+              <p className="text-sm text-muted-foreground">{question.text}</p>
+            )}
+          </div>
+          <div>
+            {field.type === "textarea" ? (
+              <Textarea
                 id={field.uid}
-                type="date"
-                value={documentFields[field.uid] || ''}
+                value={documentFields[field.uid] || ""}
                 onChange={(e) => handleFieldChange(field.uid, e.target.value)}
-                className={`w-full ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                className={`w-full ${
+                  hasError ? "border-red-500 ring-1 ring-red-500" : ""
+                }`}
+                placeholder={placeholderText}
+                rows={4}
               />
-            </div>
-          ) : field.title.toLowerCase().includes('companies house') ? (
-            <div>
+            ) : isDateField ? (
+              <div className="relative">
+                <Input
+                  id={field.uid}
+                  type="date"
+                  value={documentFields[field.uid] || ""}
+                  onChange={(e) => handleFieldChange(field.uid, e.target.value)}
+                  className={`w-full ${
+                    hasError ? "border-red-500 ring-1 ring-red-500" : ""
+                  }`}
+                />
+              </div>
+            ) : field.title.toLowerCase().includes("companies house") ? (
+              <div>
+                <div className="relative">
+                  <Input
+                    id={field.uid}
+                    type="text"
+                    value={documentFields[field.uid] || ""}
+                    onChange={(e) =>
+                      handleFieldChange(field.uid, e.target.value)
+                    }
+                    className={`w-full ${
+                      hasError ? "border-red-500 ring-1 ring-red-500" : ""
+                    }`}
+                    placeholder="Enter company number"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Find on{" "}
+                  <a
+                    href="https://find-and-update.company-information.service.gov.uk/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:underline"
+                  >
+                    Companies House
+                  </a>
+                </p>
+              </div>
+            ) : isEmailField ? (
+              <div className="relative">
+                <Input
+                  id={field.uid}
+                  type="email"
+                  value={documentFields[field.uid] || ""}
+                  onChange={(e) => handleFieldChange(field.uid, e.target.value)}
+                  className={`w-full ${
+                    hasError ? "border-red-500 ring-1 ring-red-500" : ""
+                  }`}
+                  placeholder="email@example.com"
+                />
+              </div>
+            ) : isMonetaryField ? (
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+                  £
+                </span>
+                <Input
+                  id={field.uid}
+                  type="text"
+                  value={documentFields[field.uid] || ""}
+                  onChange={(e) => handleFieldChange(field.uid, e.target.value)}
+                  className={`w-full pl-7 ${
+                    hasError ? "border-red-500 ring-1 ring-red-500" : ""
+                  }`}
+                  placeholder={placeholderText}
+                />
+              </div>
+            ) : (
               <div className="relative">
                 <Input
                   id={field.uid}
                   type="text"
-                  value={documentFields[field.uid] || ''}
+                  value={documentFields[field.uid] || ""}
                   onChange={(e) => handleFieldChange(field.uid, e.target.value)}
-                  className={`w-full ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
-                  placeholder="Enter company number"
+                  className={`w-full ${
+                    hasError ? "border-red-500 ring-1 ring-red-500" : ""
+                  }`}
+                  placeholder={placeholderText}
                 />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Find on <a href="https://find-and-update.company-information.service.gov.uk/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Companies House</a>
+            )}
+            {hasError && (
+              <p className="text-red-500 text-xs mt-1 font-medium">
+                {fieldErrors[field.uid]}
               </p>
-            </div>
-          ) : isEmailField ? (
-            <div className="relative">
-              <Input
-                id={field.uid}
-                type="email"
-                value={documentFields[field.uid] || ''}
-                onChange={(e) => handleFieldChange(field.uid, e.target.value)}
-                className={`w-full ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
-                placeholder="email@example.com"
-              />
-            </div>
-          ) : isMonetaryField ? (
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">£</span>
-              <Input
-                id={field.uid}
-                type="text"
-                value={documentFields[field.uid] || ''}
-                onChange={(e) => handleFieldChange(field.uid, e.target.value)}
-                className={`w-full pl-7 ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
-                placeholder={placeholderText}
-              />
-            </div>
-          ) : (
-            <div className="relative">
-              <Input
-                id={field.uid}
-                type="text"
-                value={documentFields[field.uid] || ''}
-                onChange={(e) => handleFieldChange(field.uid, e.target.value)}
-                className={`w-full ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
-                placeholder={placeholderText}
-              />
-            </div>
-          )}
-          {hasError && (
-            <p className="text-red-500 text-xs mt-1 font-medium">{fieldErrors[field.uid]}</p>
-          )}
+            )}
+          </div>
         </div>
-      </div>
-    );
-  }, [documentFields, fieldErrors, getQuestionForField]);
-  
+      );
+    },
+    [documentFields, fieldErrors, getQuestionForField]
+  );
+
   // Group and render fields by category for better organization
   const renderFieldsByGroups = useCallback(() => {
     const groupedFields = groupFieldsByCategory();
-    
+
     return (
       <div className="space-y-8">
         {Object.entries(groupedFields).map(([category, fields]) => (
           <div key={category} className="space-y-3">
             <h3 className="text-lg font-semibold capitalize mb-4 border-b pb-2">
-              {category === 'client' && 'Client Information'}
-              {category === 'company' && 'Company Information'}
-              {category === 'contract' && 'Contract Details'}
-              {category === 'signatory' && 'Signatory Information'}
-              {category === 'other' && 'Additional Information'}
+              {category === "client" && "Client Information"}
+              {category === "company" && "Company Information"}
+              {category === "contract" && "Contract Details"}
+              {category === "signatory" && "Signatory Information"}
+              {category === "other" && "Additional Information"}
             </h3>
             <div className="space-y-1">
-              {fields.map(field => renderTemplateField(field))}
+              {fields.map((field) => renderTemplateField(field))}
             </div>
           </div>
         ))}
       </div>
     );
   }, [groupFieldsByCategory, renderTemplateField]);
-  
+
   // Load templates
   useEffect(() => {
     setIsTemplatesLoading(true);
@@ -777,31 +975,96 @@ export default function CreateDocumentPage() {
   return (
     <div className="container max-w-5xl py-10">
       <ToastContainer position="top-right" autoClose={5000} />
-      
+
       {/* Debug Status Bar */}
       <div className="bg-slate-100 p-2 mb-4 rounded-md text-xs">
         <div className="flex flex-wrap gap-2">
-          <Badge variant={isPageLoading ? "destructive" : "secondary"} className="py-1">
-            Page: {isPageLoading ? 'Loading' : 'Ready'}
+          <Badge
+            variant={isPageLoading ? "destructive" : "secondary"}
+            className="py-1"
+          >
+            Page: {isPageLoading ? "Loading" : "Ready"}
           </Badge>
-          <Badge variant={isTicketLoading ? "destructive" : ticketId ? "secondary" : "outline"} className="py-1">
-            Ticket: {isTicketLoading ? 'Loading' : ticketId ? `#${ticketId}` : 'No Ticket'}
+          <Badge
+            variant={
+              isTicketLoading
+                ? "destructive"
+                : ticketId
+                ? "secondary"
+                : "outline"
+            }
+            className="py-1"
+          >
+            Ticket:{" "}
+            {isTicketLoading
+              ? "Loading"
+              : ticketId
+              ? `#${ticketId}`
+              : "No Ticket"}
           </Badge>
-          <Badge variant={isTemplatesLoading ? "destructive" : "secondary"} className="py-1">
-            Templates: {isTemplatesLoading ? 'Loading' : `${juroTemplates.length} Available`}
+          <Badge
+            variant={isTemplatesLoading ? "destructive" : "secondary"}
+            className="py-1"
+          >
+            Templates:{" "}
+            {isTemplatesLoading
+              ? "Loading"
+              : `${juroTemplates.length} Available`}
           </Badge>
-          <Badge variant={isLoadingTemplate ? "destructive" : "default"} className="py-1">
-            Template: {isLoadingTemplate ? 'Loading' : selectedTemplate ? 'Selected' : 'None'}
+          <Badge
+            variant={isLoadingTemplate ? "destructive" : "default"}
+            className="py-1"
+          >
+            Template:{" "}
+            {isLoadingTemplate
+              ? "Loading"
+              : selectedTemplate
+              ? "Selected"
+              : "None"}
           </Badge>
-          <Badge variant={isAutofilling ? "destructive" : autofilledContract ? "secondary" : "default"} className="py-1">
-            Autofill: {isAutofilling ? 'In Progress' : autofilledContract ? 'Complete' : 'Not Started'}
+          <Badge
+            variant={
+              isAutofilling
+                ? "destructive"
+                : autofilledContract
+                ? "secondary"
+                : "default"
+            }
+            className="py-1"
+          >
+            Autofill:{" "}
+            {isAutofilling
+              ? "In Progress"
+              : autofilledContract
+              ? "Complete"
+              : "Not Started"}
           </Badge>
-          <Badge variant={isCreatingDocument ? "destructive" : documentCreated ? "secondary" : "default"} className="py-1">
-            Document: {isCreatingDocument ? 'Creating' : documentCreated ? 'Created' : 'Not Created'}
+          <Badge
+            variant={
+              isCreatingDocument
+                ? "destructive"
+                : documentCreated
+                ? "secondary"
+                : "default"
+            }
+            className="py-1"
+          >
+            Document:{" "}
+            {isCreatingDocument
+              ? "Creating"
+              : documentCreated
+              ? "Created"
+              : "Not Created"}
           </Badge>
         </div>
         <div className="mt-2">
-          <p className="font-mono">URL Params: {JSON.stringify({templateId: templateIdFromUrl, ticketId: rawTicketId})}</p>
+          <p className="font-mono">
+            URL Params:{" "}
+            {JSON.stringify({
+              templateId: templateIdFromUrl,
+              ticketId: rawTicketId,
+            })}
+          </p>
         </div>
       </div>
 
@@ -816,38 +1079,71 @@ export default function CreateDocumentPage() {
         <>
           {/* Back button */}
           <div className="mb-6">
-            <Link href="/juro" className="flex items-center text-sm text-muted-foreground hover:text-primary">
+            <Link
+              href="/juro"
+              className="flex items-center text-sm text-muted-foreground hover:text-primary"
+            >
               <ArrowLeft className="w-4 h-4 mr-1" /> Back to Juro Dashboard
             </Link>
           </div>
-          
+
           <h1 className="text-2xl font-bold mb-6">Create Document</h1>
-          
+
           {/* Ticket Information Banner */}
           {detailedTicketData && (
             <Alert className="mb-6">
               <AlertTitle className="flex items-center">
                 <FileText className="h-4 w-4 mr-2" />
-                Creating document for: {detailedTicketData.oppcompanyname || detailedTicketData.client_name || "Unknown Company"}
+                Creating document for:{" "}
+                {detailedTicketData.oppcompanyname ||
+                  detailedTicketData.client_name ||
+                  "Unknown Company"}
               </AlertTitle>
               <AlertDescription>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <div>
                     <span className="block">Ticket ID: {ticketId}</span>
-                    {detailedTicketData.oppcontactname && <span className="block">Contact: {detailedTicketData.oppcontactname}</span>}
-                    {detailedTicketData.oppemailaddress && <span className="block">Email: {detailedTicketData.oppemailaddress}</span>}
-                    {detailedTicketData.opptel && <span className="block">Phone: {detailedTicketData.opptel}</span>}
+                    {detailedTicketData.oppcontactname && (
+                      <span className="block">
+                        Contact: {detailedTicketData.oppcontactname}
+                      </span>
+                    )}
+                    {detailedTicketData.oppemailaddress && (
+                      <span className="block">
+                        Email: {detailedTicketData.oppemailaddress}
+                      </span>
+                    )}
+                    {detailedTicketData.opptel && (
+                      <span className="block">
+                        Phone: {detailedTicketData.opptel}
+                      </span>
+                    )}
                   </div>
                   <div>
-                    {detailedTicketData.oppvalue && <span className="block">Quote Value: £{detailedTicketData.oppvalue}</span>}
-                    {detailedTicketData.respondbydate && <span className="block">Respond By: {new Date(detailedTicketData.respondbydate).toLocaleDateString()}</span>}
-                    {detailedTicketData.opptype && <span className="block">Type: {detailedTicketData.opptype}</span>}
+                    {detailedTicketData.oppvalue && (
+                      <span className="block">
+                        Quote Value: £{detailedTicketData.oppvalue}
+                      </span>
+                    )}
+                    {detailedTicketData.respondbydate && (
+                      <span className="block">
+                        Respond By:{" "}
+                        {new Date(
+                          detailedTicketData.respondbydate
+                        ).toLocaleDateString()}
+                      </span>
+                    )}
+                    {detailedTicketData.opptype && (
+                      <span className="block">
+                        Type: {detailedTicketData.opptype}
+                      </span>
+                    )}
                   </div>
                 </div>
               </AlertDescription>
             </Alert>
           )}
-          
+
           {/* Step 1: Template Selection */}
           {currentStep === 1 && (
             <Card>
@@ -861,7 +1157,10 @@ export default function CreateDocumentPage() {
                 {isTemplatesLoading ? (
                   <div className="space-y-4">
                     {[1, 2, 3].map((i) => (
-                      <div key={i} className="p-4 border rounded-lg animate-pulse">
+                      <div
+                        key={i}
+                        className="p-4 border rounded-lg animate-pulse"
+                      >
                         <div className="flex items-start justify-between">
                           <div>
                             <div className="h-5 bg-gray-200 rounded w-48 mb-2"></div>
@@ -875,12 +1174,12 @@ export default function CreateDocumentPage() {
                 ) : (
                   <div className="grid grid-cols-1 gap-4">
                     {juroTemplates.map((template) => (
-                      <div 
+                      <div
                         key={template.id}
                         className={`p-4 border rounded-lg cursor-pointer transition-all ${
-                          selectedTemplate === template.id 
-                            ? 'border-primary bg-primary/5' 
-                            : 'hover:border-primary/50'
+                          selectedTemplate === template.id
+                            ? "border-primary bg-primary/5"
+                            : "hover:border-primary/50"
                         }`}
                         onClick={() => handleTemplateSelection(template.id)}
                       >
@@ -888,27 +1187,37 @@ export default function CreateDocumentPage() {
                           <div>
                             <h3 className="font-medium">{template.name}</h3>
                             <p className="text-sm text-muted-foreground">
-                              {template.description || "No description available"}
+                              {template.description ||
+                                "No description available"}
                             </p>
                           </div>
-                          <Badge variant={template.status === 'active' ? 'default' : 'outline'}>
+                          <Badge
+                            variant={
+                              template.status === "active"
+                                ? "default"
+                                : "outline"
+                            }
+                          >
                             {template.status}
                           </Badge>
                         </div>
                       </div>
                     ))}
-                    
+
                     {juroTemplates.length === 0 && (
                       <div className="text-center py-8">
-                        <p>No templates available. Please create templates in Juro first.</p>
+                        <p>
+                          No templates available. Please create templates in
+                          Juro first.
+                        </p>
                       </div>
                     )}
                   </div>
                 )}
               </CardContent>
               <CardFooter className="flex justify-end">
-                <Button 
-                  onClick={() => setCurrentStep(2)} 
+                <Button
+                  onClick={() => setCurrentStep(2)}
                   disabled={!selectedTemplate || isLoadingTemplate}
                 >
                   {isLoadingTemplate ? (
@@ -923,20 +1232,25 @@ export default function CreateDocumentPage() {
               </CardFooter>
             </Card>
           )}
-          
+
           {/* Step 2: Form Filling */}
           {currentStep === 2 && (
             <div className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle>Document Information</CardTitle>
-                  <CardDescription>Enter the basic information for your document</CardDescription>
+                  <CardDescription>
+                    Enter the basic information for your document
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div className="grid gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="document-title" className="text-base font-medium">
+                        <Label
+                          htmlFor="document-title"
+                          className="text-base font-medium"
+                        >
                           Document Title <span className="text-red-500">*</span>
                         </Label>
                         <Input
@@ -944,19 +1258,32 @@ export default function CreateDocumentPage() {
                           placeholder="Enter document title"
                           value={documentTitle}
                           onChange={(e) => handleTitleChange(e.target.value)}
-                          className={fieldErrors["document-title"] ? "border-red-500 ring-1 ring-red-500" : ""}
+                          className={
+                            fieldErrors["document-title"]
+                              ? "border-red-500 ring-1 ring-red-500"
+                              : ""
+                          }
                         />
                         {fieldErrors["document-title"] && (
-                          <p className="text-red-500 text-xs">{fieldErrors["document-title"]}</p>
+                          <p className="text-red-500 text-xs">
+                            {fieldErrors["document-title"]}
+                          </p>
                         )}
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="document-description" className="text-base font-medium">Description</Label>
+                        <Label
+                          htmlFor="document-description"
+                          className="text-base font-medium"
+                        >
+                          Description
+                        </Label>
                         <Textarea
                           id="document-description"
                           placeholder="Enter document description (optional)"
                           value={documentDescription}
-                          onChange={(e) => setDocumentDescription(e.target.value)}
+                          onChange={(e) =>
+                            setDocumentDescription(e.target.value)
+                          }
                           rows={2}
                         />
                       </div>
@@ -968,7 +1295,9 @@ export default function CreateDocumentPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Document Details</CardTitle>
-                  <CardDescription>Fill in the required fields for this document template</CardDescription>
+                  <CardDescription>
+                    Fill in the required fields for this document template
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {validationErrors.length > 0 && (
@@ -984,12 +1313,14 @@ export default function CreateDocumentPage() {
                       </AlertDescription>
                     </Alert>
                   )}
-                  
+
                   {templateFields.length > 0 ? (
                     renderFieldsByGroups()
                   ) : (
                     <div className="text-center py-8">
-                      <p className="text-muted-foreground">No fields available for this template.</p>
+                      <p className="text-muted-foreground">
+                        No fields available for this template.
+                      </p>
                     </div>
                   )}
                 </CardContent>
@@ -1015,9 +1346,7 @@ export default function CreateDocumentPage() {
                           Creating...
                         </>
                       ) : (
-                        <>
-                          Create Document
-                        </>
+                        <>Create Document</>
                       )}
                     </Button>
                   </div>
@@ -1025,7 +1354,7 @@ export default function CreateDocumentPage() {
               </Card>
             </div>
           )}
-          
+
           {/* Success Dialog */}
           <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
             <DialogContent>
@@ -1035,21 +1364,22 @@ export default function CreateDocumentPage() {
                   Document Created Successfully
                 </DialogTitle>
                 <DialogDescription>
-                  Your document has been created and is ready for further action.
+                  Your document has been created and is ready for further
+                  action.
                 </DialogDescription>
               </DialogHeader>
-              
+
               <div className="py-4">
                 <p className="font-medium">{documentTitle}</p>
                 <p className="text-sm text-muted-foreground mb-4">
                   Document ID: {createdDocumentId}
                 </p>
-                
+
                 <div className="flex items-center space-x-2 mb-2">
                   <ExternalLink className="h-4 w-4" />
-                  <a 
-                    href={documentUrl} 
-                    target="_blank" 
+                  <a
+                    href={documentUrl}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-primary hover:underline"
                   >
@@ -1057,11 +1387,11 @@ export default function CreateDocumentPage() {
                   </a>
                 </div>
               </div>
-              
+
               <DialogFooter className="flex flex-col sm:flex-row gap-2">
-                <Button 
-                  variant="outline" 
-                  className="sm:flex-1" 
+                <Button
+                  variant="outline"
+                  className="sm:flex-1"
                   onClick={handleDownloadDocument}
                   disabled={isDownloading}
                 >
@@ -1077,8 +1407,8 @@ export default function CreateDocumentPage() {
                     </>
                   )}
                 </Button>
-                <Button 
-                  className="sm:flex-1" 
+                <Button
+                  className="sm:flex-1"
                   onClick={handleSendForSigning}
                   disabled={isSendingForSigning}
                 >
@@ -1094,8 +1424,8 @@ export default function CreateDocumentPage() {
                     </>
                   )}
                 </Button>
-                <Button 
-                  className="sm:flex-1" 
+                <Button
+                  className="sm:flex-1"
                   onClick={handleAddToAllops}
                   disabled={isAddingToAllops}
                 >
